@@ -64,6 +64,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.cinelocal.data.model.TrackInfo
 import com.example.cinelocal.cast.CastState
 import com.example.cinelocal.player.PlayerUiState
 import com.example.cinelocal.ui.theme.AccentGold

@@ -225,7 +225,7 @@ class PlayerViewModel(
     fun playLiveStream(title: String, group: String, streamUrl: String) {
         currentEpisode = null
         currentChannel = IptvChannelEntity(
-            id = 0L,
+            id = java.util.UUID.randomUUID().toString(),
             name = title,
             group = group,
             url = streamUrl

@@ -171,7 +171,7 @@ fun MediaCard(
                         fontSize = 11.sp
                     )
 
-                    if (media.kind == MediaKind.SERIES && media.totalEpisodes > 0) {
+                    if (media.kind == MediaKind.SERIES && (media.totalEpisodes ?: 0) > 0) {
                         Text(
                             text = "${media.totalEpisodes} eps",
                             style = MaterialTheme.typography.bodySmall,

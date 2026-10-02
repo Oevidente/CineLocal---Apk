@@ -1,6 +1,6 @@
 {
-  "summary":  "Plano de reformulação completa do sistema de transmissão Cast no CineLocal com botão permanente, busca multi-protocolo (Google Cast + DLNA/UPnP) e conexão direta por IP da Smart TV.",
-  "updatedAt":  "2026-10-02T20:46:22.205772721Z",
+  "summary":  "Revised implementation plan emphasizing the complete implementation of magnet torrent addition, TorrentUtils parsing, HTTP/WebTorrent streaming bridge, and seamless paste & play torrent playback in CineLocal.",
+  "updatedAt":  "2026-10-02T23:15:39.590833808Z",
   "requestFeedback":  true,
   "userFacing":  true
 }

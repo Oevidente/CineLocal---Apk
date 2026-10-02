@@ -19,6 +19,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
@@ -64,7 +65,7 @@ class MainViewModel(
     init {
         viewModelScope.launch {
             repository.loadInitialDataIfEmpty()
-            val key = repository.getSetting("tmdb_api_key") ?: ""
+            val key = repository.getSetting("tmdb_api_key").firstOrNull() ?: ""
             _tmdbApiKey.value = key
         }
     }
@@ -162,7 +163,7 @@ class MainViewModel(
         }
     }
 
-    fun deleteMedia(mediaId: Long) {
+    fun deleteMedia(mediaId: String) {
         viewModelScope.launch {
             repository.deleteMedia(mediaId)
             _selectedMediaWithEpisodes.value = null

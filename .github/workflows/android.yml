@@ -30,7 +30,7 @@ jobs:
         run: chmod +x gradlew || true
 
       - name: Build Debug APK
-        run: gradle assembleDebug --no-daemon
+        run: ./gradlew assembleDebug --no-daemon
 
       - name: Prepare APK Output Directory
         run: |
