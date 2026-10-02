@@ -1,0 +1,6 @@
+{
+  "summary":  "Plano de portabilidade e desenvolvimento da aplicação nativa Android em Kotlin com Jetpack Compose, trazendo suporte a filmes e séries locais, canais IPTV ao vivo, gerenciador de arquivos via SAF, player de vídeo nativo Media3 ExoPlayer e Google Cast SDK nativo com controles de reprodução.",
+  "updatedAt":  "2026-10-02T19:32:26.734960497Z",
+  "requestFeedback":  true,
+  "userFacing":  true
+}
