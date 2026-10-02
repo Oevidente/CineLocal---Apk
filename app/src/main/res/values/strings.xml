@@ -1,0 +1,17 @@
+<resources>
+    <string name="app_name">CineLocal</string>
+    <string name="tab_all">Início</string>
+    <string name="tab_movies">Filmes</string>
+    <string name="tab_series">Séries</string>
+    <string name="tab_channels">Canais Ao Vivo</string>
+    <string name="tab_favorites">Favoritos</string>
+    <string name="search_placeholder">Buscar filmes, séries ou canais…</string>
+    <string name="add_media_folder">Adicionar Pasta</string>
+    <string name="rescan_library">Atualizar Biblioteca</string>
+    <string name="settings">Configurações</string>
+    <string name="play">Assistir</string>
+    <string name="resume">Continuar</string>
+    <string name="episodes">Episódios</string>
+    <string name="no_media_title">Sua biblioteca está vazia</string>
+    <string name="no_media_desc">Adicione pastas locais de filmes ou séries, ou assista a canais de TV ao vivo via IPTV.</string>
+</resources>
