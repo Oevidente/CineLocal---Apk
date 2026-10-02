@@ -27,6 +27,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FolderOpen
 import androidx.compose.material.icons.filled.Home
@@ -86,6 +87,7 @@ import com.example.cinelocal.ui.screens.MoviesScreen
 import com.example.cinelocal.ui.screens.PlayerScreen
 import com.example.cinelocal.ui.screens.SeriesScreen
 import com.example.cinelocal.ui.screens.SettingsScreen
+import com.example.cinelocal.ui.screens.TorrentsScreen
 import com.example.cinelocal.ui.theme.CineLocalTheme
 import com.example.cinelocal.ui.theme.CineRed
 import com.example.cinelocal.ui.theme.DarkBackground
@@ -98,6 +100,7 @@ enum class AppTab(val label: String, val icon: ImageVector) {
     HOME("Início", Icons.Default.Home),
     MOVIES("Filmes", Icons.Default.Movie),
     SERIES("Séries", Icons.Default.Tv),
+    TORRENTS("Torrents", Icons.Default.Download),
     CHANNELS("Ao Vivo", Icons.Default.Tv),
     FAVORITES("Favoritos", Icons.Default.Favorite),
     SETTINGS("Config", Icons.Default.Settings)
@@ -181,6 +184,7 @@ fun CineLocalApp(
     val allMedia by mainViewModel.allMedia.collectAsStateWithLifecycle()
     val movies by mainViewModel.movies.collectAsStateWithLifecycle()
     val series by mainViewModel.series.collectAsStateWithLifecycle()
+    val torrents by mainViewModel.torrents.collectAsStateWithLifecycle()
     val favorites by mainViewModel.favorites.collectAsStateWithLifecycle()
     val continueWatching by mainViewModel.continueWatching.collectAsStateWithLifecycle()
     val allMediaWithEpisodes by mainViewModel.allMediaWithEpisodes.collectAsStateWithLifecycle()
@@ -262,8 +266,6 @@ fun CineLocalApp(
                                 }
 
                                 Row(verticalAlignment = Alignment.CenterVertically) {
-                                    NativeCastButton(castState = castState)
-
                                     CastButton(
                                         castState = castState,
                                         onClick = {
@@ -373,7 +375,7 @@ fun CineLocalApp(
                 }
             },
             floatingActionButton = {
-                if (activeTab == AppTab.HOME || activeTab == AppTab.MOVIES || activeTab == AppTab.SERIES) {
+                if (activeTab == AppTab.HOME || activeTab == AppTab.MOVIES || activeTab == AppTab.SERIES || activeTab == AppTab.TORRENTS) {
                     FloatingActionButton(
                         onClick = { showAddDialog = true },
                         containerColor = CineRed,
@@ -409,6 +411,7 @@ fun CineLocalApp(
                             allMedia = allMedia,
                             movies = movies,
                             series = series,
+                            torrents = torrents,
                             continueWatching = continueWatching,
                             allMediaWithEpisodes = allMediaWithEpisodes,
                             channels = iptvChannels,
@@ -446,6 +449,7 @@ fun CineLocalApp(
                             onAddMediaClick = { showAddDialog = true },
                             onNavigateToMovies = { activeTab = AppTab.MOVIES },
                             onNavigateToSeries = { activeTab = AppTab.SERIES },
+                            onNavigateToTorrents = { activeTab = AppTab.TORRENTS },
                             onNavigateToChannels = { activeTab = AppTab.CHANNELS }
                         )
                     }
@@ -461,6 +465,18 @@ fun CineLocalApp(
                             series = series,
                             onSeriesClick = { media -> mainViewModel.selectMedia(media) },
                             onFavoriteToggle = { media -> mainViewModel.toggleMediaFavorite(media) }
+                        )
+                    }
+                    AppTab.TORRENTS -> {
+                        TorrentsScreen(
+                            torrents = torrents,
+                            onTorrentClick = { media -> mainViewModel.selectMedia(media) },
+                            onFavoriteToggle = { media -> mainViewModel.toggleMediaFavorite(media) },
+                            onAddMagnetClick = { showAddDialog = true },
+                            onPasteAndPlay = { magnetUri ->
+                                playerViewModel.playMagnetStream(magnetUri, "")
+                                isPlayerActive = true
+                            }
                         )
                     }
                     AppTab.CHANNELS -> {
@@ -538,6 +554,9 @@ fun CineLocalApp(
                 onPickFolderClick = { folderPickerLauncher.launch(null) },
                 onAddDirectStream = { title, url, isSeries ->
                     mainViewModel.addDirectMedia(title, url, isSeries)
+                },
+                onAddTorrentStream = { magnetUri, customTitle, isSeries ->
+                    mainViewModel.addTorrentMedia(magnetUri, customTitle, isSeries)
                 }
             )
         }
@@ -568,6 +587,13 @@ fun CineLocalApp(
                 onSelectDevice = { routeId ->
                     playerViewModel.castManager.selectDevice(routeId)
                     playerViewModel.triggerCastForCurrentMedia()
+                },
+                onConnectByIp = { ip ->
+                    playerViewModel.castManager.connectByIp(ip)
+                    playerViewModel.triggerCastForCurrentMedia()
+                },
+                onRefreshDiscovery = {
+                    playerViewModel.castManager.startDiscovery()
                 },
                 onDisconnect = { playerViewModel.castManager.disconnect() },
                 onDismiss = { showCastDialog = false }

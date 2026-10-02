@@ -14,9 +14,12 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Cast
 import androidx.compose.material.icons.filled.CastConnected
+import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Router
 import androidx.compose.material.icons.filled.Tv
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -25,20 +28,25 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.RadioButton
-import androidx.compose.material3.RadioButtonDefaults
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
-import com.example.cinelocal.cast.CastDeviceInfo
 import com.example.cinelocal.cast.CastState
 import com.example.cinelocal.ui.theme.AccentGold
 import com.example.cinelocal.ui.theme.CineRed
@@ -51,9 +59,14 @@ import com.example.cinelocal.ui.theme.TextSecondary
 fun CastDeviceDialog(
     castState: CastState,
     onSelectDevice: (String) -> Unit,
+    onConnectByIp: (String) -> Unit,
+    onRefreshDiscovery: () -> Unit,
     onDisconnect: () -> Unit,
     onDismiss: () -> Unit
 ) {
+    var ipInput by remember { mutableStateOf("") }
+    var showIpInput by remember { mutableStateOf(false) }
+
     AlertDialog(
         onDismissRequest = onDismiss,
         containerColor = DarkSurface,
@@ -61,21 +74,35 @@ fun CastDeviceDialog(
         textContentColor = TextSecondary,
         title = {
             Row(
+                modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(10.dp)
+                horizontalArrangement = Arrangement.SpaceBetween
             ) {
-                Icon(
-                    imageVector = if (castState.isConnected) Icons.Default.CastConnected else Icons.Default.Cast,
-                    contentDescription = null,
-                    tint = if (castState.isConnected) AccentGold else CineRed,
-                    modifier = Modifier.size(28.dp)
-                )
-                Text(
-                    text = if (castState.isConnected) "Transmitindo para TV" else "Transmitir para Dispositivo",
-                    style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.Bold,
-                    color = TextPrimary
-                )
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Icon(
+                        imageVector = if (castState.isConnected) Icons.Default.CastConnected else Icons.Default.Cast,
+                        contentDescription = null,
+                        tint = if (castState.isConnected) AccentGold else CineRed,
+                        modifier = Modifier.size(28.dp)
+                    )
+                    Text(
+                        text = if (castState.isConnected) "Transmitindo para TV" else "Transmitir para TV",
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Bold,
+                        color = TextPrimary
+                    )
+                }
+
+                IconButton(onClick = onRefreshDiscovery) {
+                    Icon(
+                        imageVector = Icons.Default.Refresh,
+                        contentDescription = "Atualizar Busca",
+                        tint = TextSecondary
+                    )
+                }
             }
         },
         text = {
@@ -97,13 +124,13 @@ fun CastDeviceDialog(
                                 Spacer(modifier = Modifier.width(12.dp))
                                 Column {
                                     Text(
-                                        text = castState.deviceName ?: "Chromecast",
+                                        text = castState.deviceName ?: "Smart TV",
                                         style = MaterialTheme.typography.titleMedium,
                                         fontWeight = FontWeight.Bold,
                                         color = TextPrimary
                                     )
                                     Text(
-                                        text = "Conectado via Google Cast",
+                                        text = "Conectado via Transmissão",
                                         style = MaterialTheme.typography.bodySmall,
                                         color = AccentGold
                                     )
@@ -143,82 +170,128 @@ fun CastDeviceDialog(
                     }
                 } else {
                     Text(
-                        text = "Selecione uma Smart TV ou Chromecast na mesma rede Wi-Fi para transmitir seus filmes, séries, IPTV e torrents com legendas sincronizadas:",
+                        text = "Dispositivos Google Cast, Smart TVs (DLNA/UPnP) na mesma rede Wi-Fi:",
                         style = MaterialTheme.typography.bodySmall,
                         color = TextSecondary
                     )
 
-                    Spacer(modifier = Modifier.height(16.dp))
+                    Spacer(modifier = Modifier.height(12.dp))
 
-                    if (castState.isConnecting) {
-                        Row(
+                    if (castState.availableDevices.isNotEmpty()) {
+                        LazyColumn(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(vertical = 12.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.Center
+                                .height(160.dp)
                         ) {
-                            CircularProgressIndicator(color = CineRed, modifier = Modifier.size(24.dp))
-                            Spacer(modifier = Modifier.width(12.dp))
-                            Text("Conectando ao dispositivo...", color = TextPrimary)
+                            items(castState.availableDevices) { device ->
+                                Card(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(vertical = 4.dp)
+                                        .clickable {
+                                            onSelectDevice(device.id)
+                                            onDismiss()
+                                        },
+                                    colors = CardDefaults.cardColors(containerColor = DarkSurfaceVariant),
+                                    shape = RoundedCornerShape(8.dp)
+                                ) {
+                                    Row(
+                                        modifier = Modifier.padding(12.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.Tv,
+                                            contentDescription = null,
+                                            tint = if (device.isSelected) AccentGold else CineRed,
+                                            modifier = Modifier.size(24.dp)
+                                        )
+                                        Spacer(modifier = Modifier.width(12.dp))
+                                        Column(modifier = Modifier.weight(1f)) {
+                                            Text(
+                                                text = device.name,
+                                                style = MaterialTheme.typography.bodyMedium,
+                                                fontWeight = FontWeight.Bold,
+                                                color = TextPrimary
+                                            )
+                                            if (!device.description.isNullOrBlank()) {
+                                                Text(
+                                                    text = device.description,
+                                                    style = MaterialTheme.typography.bodySmall,
+                                                    color = TextSecondary
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
+                            }
                         }
-                    } else if (castState.availableDevices.isEmpty()) {
+                    } else {
                         Box(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(vertical = 20.dp),
+                                .padding(vertical = 12.dp),
                             contentAlignment = Alignment.Center
                         ) {
-                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
                                 CircularProgressIndicator(
-                                    color = CineRed.copy(alpha = 0.6f),
-                                    modifier = Modifier.size(28.dp),
-                                    strokeWidth = 3.dp
+                                    color = CineRed,
+                                    modifier = Modifier.size(20.dp),
+                                    strokeWidth = 2.dp
                                 )
-                                Spacer(modifier = Modifier.height(12.dp))
+                                Spacer(modifier = Modifier.width(10.dp))
                                 Text(
-                                    text = "Procurando dispositivos Google Cast na rede...",
+                                    text = "Buscando Chromecast e Smart TVs na Wi-Fi...",
                                     style = MaterialTheme.typography.bodySmall,
                                     color = TextSecondary
                                 )
                             }
                         }
+                    }
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    // Direct IP Option
+                    if (!showIpInput) {
+                        OutlinedButton(
+                            onClick = { showIpInput = true },
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(8.dp)
+                        ) {
+                            Icon(imageVector = Icons.Default.Router, contentDescription = null, tint = AccentGold)
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("Conectar diretamente por IP da TV", color = TextPrimary)
+                        }
                     } else {
-                        LazyColumn(modifier = Modifier.fillMaxWidth()) {
-                            items(castState.availableDevices) { device ->
-                                Row(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .clickable {
-                                            onSelectDevice(device.id)
-                                            onDismiss()
-                                        }
-                                        .padding(vertical = 8.dp, horizontal = 4.dp),
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Default.Tv,
-                                        contentDescription = null,
-                                        tint = if (device.isSelected) AccentGold else TextSecondary,
-                                        modifier = Modifier.size(24.dp)
-                                    )
-                                    Spacer(modifier = Modifier.width(12.dp))
-                                    Column(modifier = Modifier.weight(1f)) {
-                                        Text(
-                                            text = device.name,
-                                            style = MaterialTheme.typography.bodyLarge,
-                                            fontWeight = if (device.isSelected) FontWeight.Bold else FontWeight.Medium,
-                                            color = TextPrimary
-                                        )
-                                        if (!device.description.isNullOrBlank()) {
-                                            Text(
-                                                text = device.description,
-                                                style = MaterialTheme.typography.bodySmall,
-                                                color = TextSecondary
-                                            )
-                                        }
+                        Column(modifier = Modifier.fillMaxWidth()) {
+                            OutlinedTextField(
+                                value = ipInput,
+                                onValueChange = { ipInput = it },
+                                label = { Text("IP da Smart TV (ex: 192.168.1.50)", color = TextSecondary) },
+                                singleLine = true,
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                colors = OutlinedTextFieldDefaults.colors(
+                                    focusedBorderColor = AccentGold,
+                                    unfocusedBorderColor = TextSecondary.copy(alpha = 0.5f),
+                                    focusedTextColor = TextPrimary,
+                                    unfocusedTextColor = TextPrimary
+                                ),
+                                modifier = Modifier.fillMaxWidth()
+                            )
+
+                            Spacer(modifier = Modifier.height(8.dp))
+
+                            Button(
+                                onClick = {
+                                    if (ipInput.isNotBlank()) {
+                                        onConnectByIp(ipInput)
+                                        onDismiss()
                                     }
-                                }
+                                },
+                                colors = ButtonDefaults.buttonColors(containerColor = AccentGold),
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = RoundedCornerShape(8.dp)
+                            ) {
+                                Text("Conectar por IP", color = Color.Black, fontWeight = FontWeight.Bold)
                             }
                         }
                     }

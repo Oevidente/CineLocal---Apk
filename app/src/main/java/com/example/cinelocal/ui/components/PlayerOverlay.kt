@@ -269,9 +269,6 @@ fun PlayerOverlay(
 
                     // Top Action Icons
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        // Native Google Cast Button
-                        NativeCastButton(castState = castState)
-
                         CastButton(
                             castState = castState,
                             onClick = onCastClick
@@ -460,6 +457,33 @@ fun PlayerOverlay(
                                 style = MaterialTheme.typography.bodySmall,
                                 color = TextSecondary
                             )
+                        }
+                        if (uiState.isTorrent) {
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                Surface(
+                                    color = Color(0xFF00E676),
+                                    shape = RoundedCornerShape(4.dp)
+                                ) {
+                                    Text(
+                                        text = "TORRENT P2P",
+                                        color = Color.Black,
+                                        style = MaterialTheme.typography.labelSmall,
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 9.sp,
+                                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                    )
+                                }
+                                Text(
+                                    text = "Streaming contínuo via Magnet Link",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = TextSecondary,
+                                    fontSize = 10.sp
+                                )
+                            }
                         }
                     } else if (uiState.isLive) {
                         Row(

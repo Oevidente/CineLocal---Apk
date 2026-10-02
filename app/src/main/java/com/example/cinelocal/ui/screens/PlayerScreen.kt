@@ -109,6 +109,13 @@ fun PlayerScreen(
                     playerViewModel.castManager.selectDevice(routeId)
                     playerViewModel.triggerCastForCurrentMedia()
                 },
+                onConnectByIp = { ip ->
+                    playerViewModel.castManager.connectByIp(ip)
+                    playerViewModel.triggerCastForCurrentMedia()
+                },
+                onRefreshDiscovery = {
+                    playerViewModel.castManager.startDiscovery()
+                },
                 onDisconnect = { playerViewModel.castManager.disconnect() },
                 onDismiss = { showCastDialog = false }
             )

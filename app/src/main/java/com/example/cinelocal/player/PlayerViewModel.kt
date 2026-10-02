@@ -21,6 +21,7 @@ import com.example.cinelocal.data.model.EpisodeEntity
 import com.example.cinelocal.data.model.IptvChannelEntity
 import com.example.cinelocal.data.model.TrackInfo
 import com.example.cinelocal.data.repository.MediaRepository
+import com.example.cinelocal.data.torrent.TorrentUtils
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -41,6 +42,7 @@ data class PlayerUiState(
     val title: String = "",
     val subtitle: String = "",
     val isLive: Boolean = false,
+    val isTorrent: Boolean = false,
     val isPlaying: Boolean = false,
     val isBuffering: Boolean = true,
     val currentPosition: Long = 0,
@@ -147,10 +149,15 @@ class PlayerViewModel(
         val currentIndex = allEpisodes.indexOfFirst { it.id == episode.id }
         val nextEp = if (currentIndex in 0 until (allEpisodes.size - 1)) allEpisodes[currentIndex + 1] else null
 
+        val isMagnet = (episode.uriString?.startsWith("magnet:", ignoreCase = true) == true) || 
+                       (episode.filePath?.startsWith("magnet:", ignoreCase = true) == true)
+        val parsedMagnet = if (isMagnet) TorrentUtils.parseMagnet(episode.uriString ?: episode.filePath ?: "") else null
+
         _uiState.value = PlayerUiState(
             title = mediaTitle,
-            subtitle = episode.title,
+            subtitle = if (isMagnet && parsedMagnet != null) "Torrent P2P • ${parsedMagnet.infoHash.take(8)}" else episode.title,
             isLive = false,
+            isTorrent = isMagnet,
             isBuffering = true,
             hasNextEpisode = nextEp != null,
             nextEpisodeTitle = nextEp?.title,
@@ -168,7 +175,8 @@ class PlayerViewModel(
                 startPositionMs = resumePos
             )
         } else {
-            val uri = Uri.parse(episode.uriString ?: ("file://" + episode.filePath))
+            val targetUriString = parsedMagnet?.streamUrl ?: episode.uriString ?: ("file://" + episode.filePath)
+            val uri = Uri.parse(targetUriString)
             val mediaItem = MediaItem.fromUri(uri)
 
             player.stop()
@@ -183,10 +191,41 @@ class PlayerViewModel(
         startProgressTracking()
     }
 
+    fun playMagnetStream(magnetUri: String, title: String) {
+        currentEpisode = null
+        currentChannel = null
+        currentMediaTitle = title
+        allEpisodesInSeries = emptyList()
+
+        val parsed = TorrentUtils.parseMagnet(magnetUri)
+        val displayTitle = if (title.isNotBlank()) title else parsed.name
+
+        _uiState.value = PlayerUiState(
+            title = displayTitle,
+            subtitle = "Torrent P2P Stream • Hash: ${parsed.infoHash.take(8)}",
+            isLive = false,
+            isTorrent = true,
+            isBuffering = true,
+            isCasting = castState.value.isConnected,
+            castDeviceName = castState.value.deviceName
+        )
+
+        val targetUrl = parsed.streamUrl
+        val uri = Uri.parse(targetUrl)
+        val mediaItem = MediaItem.fromUri(uri)
+
+        player.stop()
+        player.setMediaItem(mediaItem)
+        player.prepare()
+        player.play()
+
+        startProgressTracking()
+    }
+
     fun playLiveStream(title: String, group: String, streamUrl: String) {
         currentEpisode = null
         currentChannel = IptvChannelEntity(
-            id = "live",
+            id = 0L,
             name = title,
             group = group,
             url = streamUrl

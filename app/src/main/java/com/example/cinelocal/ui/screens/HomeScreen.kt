@@ -41,10 +41,10 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
-import com.example.cinelocal.data.db.MediaWithEpisodes
 import com.example.cinelocal.data.model.EpisodeEntity
 import com.example.cinelocal.data.model.IptvChannelEntity
 import com.example.cinelocal.data.model.MediaItemEntity
+import com.example.cinelocal.data.model.MediaWithEpisodes
 import com.example.cinelocal.ui.components.HeroBanner
 import com.example.cinelocal.ui.components.IptvChannelCard
 import com.example.cinelocal.ui.components.MediaRow
@@ -59,6 +59,7 @@ fun HomeScreen(
     allMedia: List<MediaItemEntity>,
     movies: List<MediaItemEntity>,
     series: List<MediaItemEntity>,
+    torrents: List<MediaItemEntity> = emptyList(),
     continueWatching: List<EpisodeEntity>,
     allMediaWithEpisodes: List<MediaWithEpisodes>,
     channels: List<IptvChannelEntity>,
@@ -71,6 +72,7 @@ fun HomeScreen(
     onAddMediaClick: () -> Unit,
     onNavigateToMovies: () -> Unit,
     onNavigateToSeries: () -> Unit,
+    onNavigateToTorrents: () -> Unit = {},
     onNavigateToChannels: () -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -217,6 +219,19 @@ fun HomeScreen(
                     onItemClick = onMediaClick,
                     onFavoriteToggle = onFavoriteToggle,
                     onSeeAllClick = onNavigateToSeries
+                )
+            }
+        }
+
+        // Torrents Row
+        if (torrents.isNotEmpty()) {
+            item {
+                MediaRow(
+                    title = "Torrents Magnet",
+                    items = torrents,
+                    onItemClick = onMediaClick,
+                    onFavoriteToggle = onFavoriteToggle,
+                    onSeeAllClick = onNavigateToTorrents
                 )
             }
         }

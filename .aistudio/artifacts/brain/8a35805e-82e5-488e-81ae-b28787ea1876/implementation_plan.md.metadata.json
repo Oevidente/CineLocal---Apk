@@ -1,6 +1,6 @@
 {
-  "summary":  "Plano de correção para o botão e diálogo nativo do Google Cast (MediaRouteButton / CastButtonFactory) com exibição dinâmica e busca precisa por CastMediaControlIntent.",
-  "updatedAt":  "2026-10-02T20:32:51.632738847Z",
+  "summary":  "Plano de reformulação completa do sistema de transmissão Cast no CineLocal com botão permanente, busca multi-protocolo (Google Cast + DLNA/UPnP) e conexão direta por IP da Smart TV.",
+  "updatedAt":  "2026-10-02T20:46:22.205772721Z",
   "requestFeedback":  true,
   "userFacing":  true
 }

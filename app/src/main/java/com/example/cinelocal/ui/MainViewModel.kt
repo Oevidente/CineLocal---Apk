@@ -5,11 +5,11 @@ import android.net.Uri
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.cinelocal.data.db.AppDatabase
-import com.example.cinelocal.data.db.MediaWithEpisodes
 import com.example.cinelocal.data.model.EpisodeEntity
 import com.example.cinelocal.data.model.IptvChannelEntity
 import com.example.cinelocal.data.model.MediaItemEntity
 import com.example.cinelocal.data.model.MediaKind
+import com.example.cinelocal.data.model.MediaWithEpisodes
 import com.example.cinelocal.data.repository.MediaRepository
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -76,7 +76,7 @@ class MainViewModel(
             else list.filter {
                 it.title.contains(query, ignoreCase = true) ||
                         it.originalTitle?.contains(query, ignoreCase = true) == true ||
-                        it.genres.any { g -> g.contains(query, ignoreCase = true) }
+                        it.genres?.contains(query, ignoreCase = true) == true
             }
         }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
@@ -92,6 +92,13 @@ class MainViewModel(
         .combine(_searchQuery) { list, query ->
             if (query.isBlank()) list
             else list.filter { it.title.contains(query, ignoreCase = true) }
+        }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    val torrents: StateFlow<List<MediaItemEntity>> = repository.torrents
+        .combine(_searchQuery) { list, query ->
+            if (query.isBlank()) list
+            else list.filter { it.title.contains(query, ignoreCase = true) || it.overview?.contains(query, ignoreCase = true) == true }
         }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
@@ -155,7 +162,7 @@ class MainViewModel(
         }
     }
 
-    fun deleteMedia(mediaId: String) {
+    fun deleteMedia(mediaId: Long) {
         viewModelScope.launch {
             repository.deleteMedia(mediaId)
             _selectedMediaWithEpisodes.value = null
@@ -190,6 +197,20 @@ class MainViewModel(
                 _uiEvents.emit(UiEvent.ShowToast("Mídia adicionada com sucesso!"))
             } catch (e: Exception) {
                 _uiEvents.emit(UiEvent.ShowToast("Erro: ${e.localizedMessage}"))
+            } finally {
+                _isLoading.value = false
+            }
+        }
+    }
+
+    fun addTorrentMedia(magnetUri: String, customTitle: String? = null, isSeries: Boolean = false) {
+        viewModelScope.launch {
+            _isLoading.value = true
+            try {
+                repository.addTorrentMedia(magnetUri, customTitle, isSeries)
+                _uiEvents.emit(UiEvent.ShowToast("Torrent Magnet adicionado à biblioteca!"))
+            } catch (e: Exception) {
+                _uiEvents.emit(UiEvent.ShowToast("Erro ao adicionar Magnet: ${e.localizedMessage}"))
             } finally {
                 _isLoading.value = false
             }

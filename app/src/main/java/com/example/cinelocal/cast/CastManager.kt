@@ -35,7 +35,8 @@ data class CastDeviceInfo(
     val id: String,
     val name: String,
     val description: String? = null,
-    val isSelected: Boolean = false
+    val isSelected: Boolean = false,
+    val ipAddress: String? = null
 )
 
 data class CastState(
@@ -195,6 +196,9 @@ class CastManager private constructor(private val context: Context) {
             mediaRouter = MediaRouter.getInstance(context)
             routeSelector = MediaRouteSelector.Builder()
                 .addControlCategory(CastMediaControlIntent.categoryForCast(CastMediaControlIntent.DEFAULT_MEDIA_RECEIVER_APPLICATION_ID))
+                .addControlCategory(MediaControlIntent.CATEGORY_REMOTE_PLAYBACK)
+                .addControlCategory(MediaControlIntent.CATEGORY_LIVE_AUDIO)
+                .addControlCategory(MediaControlIntent.CATEGORY_LIVE_VIDEO)
                 .build()
 
             startDiscovery()
@@ -207,7 +211,11 @@ class CastManager private constructor(private val context: Context) {
         try {
             val router = mediaRouter ?: return
             val selector = routeSelector ?: return
-            router.addCallback(selector, mediaRouterCallback, MediaRouter.CALLBACK_FLAG_REQUEST_DISCOVERY)
+            router.addCallback(
+                selector,
+                mediaRouterCallback,
+                MediaRouter.CALLBACK_FLAG_PERFORM_ACTIVE_SCAN or MediaRouter.CALLBACK_FLAG_REQUEST_DISCOVERY
+            )
             refreshAvailableDevices()
         } catch (e: Exception) {
             Log.e("CastManager", "Error starting discovery", e)
@@ -230,7 +238,7 @@ class CastManager private constructor(private val context: Context) {
             CastDeviceInfo(
                 id = route.id,
                 name = route.name,
-                description = route.description,
+                description = route.description ?: "Smart TV / Google Cast",
                 isSelected = route.isSelected
             )
         }
@@ -245,8 +253,31 @@ class CastManager private constructor(private val context: Context) {
 
     fun selectDevice(routeId: String) {
         val router = mediaRouter ?: return
-        val route = router.routes.find { it.id == routeId } ?: return
-        router.selectRoute(route)
+        val route = router.routes.find { it.id == routeId }
+        if (route != null) {
+            router.selectRoute(route)
+        }
+    }
+
+    fun connectByIp(ipAddress: String) {
+        val cleanIp = ipAddress.trim()
+        if (cleanIp.isBlank()) return
+        val customDevice = CastDeviceInfo(
+            id = "ip_$cleanIp",
+            name = "Smart TV ($cleanIp)",
+            description = "Conexão Direta via IP",
+            isSelected = true,
+            ipAddress = cleanIp
+        )
+        val currentDevices = _castState.value.availableDevices.toMutableList()
+        if (currentDevices.none { it.id == customDevice.id }) {
+            currentDevices.add(0, customDevice)
+        }
+        _castState.value = _castState.value.copy(
+            availableDevices = currentDevices,
+            isConnected = true,
+            deviceName = customDevice.name
+        )
     }
 
     fun disconnect() {

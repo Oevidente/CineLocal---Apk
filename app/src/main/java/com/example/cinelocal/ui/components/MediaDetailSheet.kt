@@ -54,9 +54,9 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
-import com.example.cinelocal.data.db.MediaWithEpisodes
 import com.example.cinelocal.data.model.EpisodeEntity
 import com.example.cinelocal.data.model.MediaKind
+import com.example.cinelocal.data.model.MediaWithEpisodes
 import com.example.cinelocal.ui.theme.AccentGold
 import com.example.cinelocal.ui.theme.CineRed
 import com.example.cinelocal.ui.theme.DarkBackground
@@ -288,18 +288,18 @@ fun MediaDetailSheet(
                         )
                     }
 
-                    if (media.genres.isNotEmpty()) {
+                    if (!media.genres.isNullOrBlank()) {
                         Spacer(modifier = Modifier.height(12.dp))
                         Row(
                             horizontalArrangement = Arrangement.spacedBy(6.dp)
                         ) {
-                            media.genres.forEach { genre ->
+                            media.genres.split(",").forEach { genre ->
                                 Surface(
                                     color = DarkSurfaceVariant,
                                     shape = RoundedCornerShape(12.dp)
                                 ) {
                                     Text(
-                                        text = genre,
+                                        text = genre.trim(),
                                         style = MaterialTheme.typography.labelSmall,
                                         color = TextSecondary,
                                         modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)

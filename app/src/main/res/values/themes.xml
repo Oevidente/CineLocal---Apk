@@ -1,8 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <style name="Theme.CineLocal" parent="android:Theme.Material.NoActionBar">
+    <style name="Theme.CineLocal" parent="Theme.AppCompat.NoActionBar">
         <item name="android:statusBarColor">#141414</item>
         <item name="android:navigationBarColor">#141414</item>
         <item name="android:windowBackground">#141414</item>
+        <item name="colorAccent">#E5A93B</item>
+        <item name="colorPrimary">#E50914</item>
+        <item name="mediaRouteTheme">@style/Theme.MediaRouter</item>
     </style>
 </resources>
