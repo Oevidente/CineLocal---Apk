@@ -12,7 +12,9 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -71,8 +73,11 @@ import com.example.cinelocal.player.PlayerViewModel
 import com.example.cinelocal.ui.MainViewModel
 import com.example.cinelocal.ui.UiEvent
 import com.example.cinelocal.ui.components.AddMediaDialog
+import com.example.cinelocal.ui.components.CastButton
+import com.example.cinelocal.ui.components.CastDeviceDialog
 import com.example.cinelocal.ui.components.IptvImportDialog
 import com.example.cinelocal.ui.components.MediaDetailSheet
+import com.example.cinelocal.ui.components.NativeCastButton
 import com.example.cinelocal.ui.components.TmdbConfigDialog
 import com.example.cinelocal.ui.screens.ChannelsScreen
 import com.example.cinelocal.ui.screens.FavoritesScreen
@@ -150,6 +155,10 @@ fun CineLocalApp(
     var showAddDialog by remember { mutableStateOf(false) }
     var showIptvDialog by remember { mutableStateOf(false) }
     var showTmdbDialog by remember { mutableStateOf(false) }
+    var showCastDialog by remember { mutableStateOf(false) }
+
+    // Cast state
+    val castState by playerViewModel.castState.collectAsStateWithLifecycle()
 
     // Storage Access Framework Folder Picker Launcher
     val folderPickerLauncher = rememberLauncherForActivityResult(
@@ -253,6 +262,16 @@ fun CineLocalApp(
                                 }
 
                                 Row(verticalAlignment = Alignment.CenterVertically) {
+                                    NativeCastButton(castState = castState)
+
+                                    CastButton(
+                                        castState = castState,
+                                        onClick = {
+                                            playerViewModel.castManager.startDiscovery()
+                                            showCastDialog = true
+                                        }
+                                    )
+
                                     IconButton(
                                         onClick = { isSearchExpanded = true },
                                         modifier = Modifier.testTag("search_toggle_button")
@@ -540,6 +559,18 @@ fun CineLocalApp(
                 initialKey = tmdbApiKey,
                 onDismiss = { showTmdbDialog = false },
                 onSaveKey = { key -> mainViewModel.saveTmdbApiKey(key) }
+            )
+        }
+
+        if (showCastDialog) {
+            CastDeviceDialog(
+                castState = castState,
+                onSelectDevice = { routeId ->
+                    playerViewModel.castManager.selectDevice(routeId)
+                    playerViewModel.triggerCastForCurrentMedia()
+                },
+                onDisconnect = { playerViewModel.castManager.disconnect() },
+                onDismiss = { showCastDialog = false }
             )
         }
     }

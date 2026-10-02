@@ -42,7 +42,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.example.cinelocal.data.remote.IptvPresets
+import com.example.cinelocal.data.model.IptvPresets
 import com.example.cinelocal.ui.theme.CineRed
 import com.example.cinelocal.ui.theme.DarkSurface
 import com.example.cinelocal.ui.theme.DarkSurfaceVariant

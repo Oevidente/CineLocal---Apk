@@ -402,9 +402,9 @@ fun MediaDetailSheet(
                                 overflow = TextOverflow.Ellipsis
                             )
 
-                            if (episode.resolution != null) {
+                            if (episode.durationSeconds > 0) {
                                 Text(
-                                    text = episode.resolution,
+                                    text = "${episode.durationSeconds / 60} min",
                                     style = MaterialTheme.typography.bodySmall,
                                     color = TextSecondary,
                                     fontSize = 11.sp

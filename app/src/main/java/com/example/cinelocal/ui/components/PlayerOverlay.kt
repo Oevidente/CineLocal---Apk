@@ -24,6 +24,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.AspectRatio
+import androidx.compose.material.icons.filled.Cast
+import androidx.compose.material.icons.filled.CastConnected
 import androidx.compose.material.icons.filled.ClosedCaption
 import androidx.compose.material.icons.filled.FastForward
 import androidx.compose.material.icons.filled.FastRewind
@@ -31,6 +33,7 @@ import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.material.icons.filled.Speed
+import androidx.compose.material.icons.filled.Tv
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
@@ -61,6 +64,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.cinelocal.cast.CastState
 import com.example.cinelocal.player.PlayerUiState
 import com.example.cinelocal.ui.theme.AccentGold
 import com.example.cinelocal.ui.theme.CineRed
@@ -74,6 +78,7 @@ import kotlinx.coroutines.delay
 @Composable
 fun PlayerOverlay(
     uiState: PlayerUiState,
+    castState: CastState,
     onBackClick: () -> Unit,
     onPlayPauseClick: () -> Unit,
     onSeekBack: () -> Unit,
@@ -84,6 +89,7 @@ fun PlayerOverlay(
     onSelectAudioTrack: (Int) -> Unit,
     onSelectSubtitleTrack: (Int) -> Unit,
     onNextEpisodeClick: () -> Unit,
+    onCastClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     var areControlsVisible by remember { mutableStateOf(true) }
@@ -111,6 +117,45 @@ fun PlayerOverlay(
                 areControlsVisible = !areControlsVisible
             }
     ) {
+        // Casting overlay badge if active
+        if (castState.isConnected) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Color.Black.copy(alpha = 0.75f)),
+                contentAlignment = Alignment.Center
+            ) {
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                    modifier = Modifier.padding(32.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.CastConnected,
+                        contentDescription = null,
+                        tint = AccentGold,
+                        modifier = Modifier.size(64.dp)
+                    )
+                    Text(
+                        text = "Transmitindo na TV",
+                        style = MaterialTheme.typography.titleLarge,
+                        color = Color.White,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Text(
+                        text = castState.deviceName ?: "Chromecast",
+                        style = MaterialTheme.typography.titleMedium,
+                        color = AccentGold
+                    )
+                    Text(
+                        text = "Use os controles abaixo ou do celular como controle remoto.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = TextSecondary
+                    )
+                }
+            }
+        }
+
         // Buffering Indicator
         if (uiState.isBuffering) {
             Box(
@@ -157,7 +202,7 @@ fun PlayerOverlay(
 
         // Animated Controls Overlay
         AnimatedVisibility(
-            visible = areControlsVisible,
+            visible = areControlsVisible || castState.isConnected,
             enter = fadeIn(),
             exit = fadeOut(),
             modifier = Modifier.fillMaxSize()
@@ -168,9 +213,9 @@ fun PlayerOverlay(
                     .background(
                         Brush.verticalGradient(
                             colors = listOf(
-                                Color.Black.copy(alpha = 0.75f),
+                                Color.Black.copy(alpha = 0.85f),
                                 Color.Transparent,
-                                Color.Black.copy(alpha = 0.85f)
+                                Color.Black.copy(alpha = 0.90f)
                             )
                         )
                     )
@@ -214,7 +259,7 @@ fun PlayerOverlay(
                                 Text(
                                     text = uiState.subtitle,
                                     style = MaterialTheme.typography.bodySmall,
-                                    color = TextSecondary,
+                                    color = if (castState.isConnected) AccentGold else TextSecondary,
                                     maxLines = 1,
                                     overflow = TextOverflow.Ellipsis
                                 )
@@ -224,44 +269,54 @@ fun PlayerOverlay(
 
                     // Top Action Icons
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        // Aspect Ratio button
-                        IconButton(onClick = onResizeModeCycle) {
-                            Icon(
-                                imageVector = Icons.Default.AspectRatio,
-                                contentDescription = uiState.resizeMode.label,
-                                tint = Color.White
-                            )
-                        }
+                        // Native Google Cast Button
+                        NativeCastButton(castState = castState)
 
-                        // Speed button
-                        Box {
-                            IconButton(onClick = { showSpeedMenu = true }) {
+                        CastButton(
+                            castState = castState,
+                            onClick = onCastClick
+                        )
+
+                        // Aspect Ratio button
+                        if (!castState.isConnected) {
+                            IconButton(onClick = onResizeModeCycle) {
                                 Icon(
-                                    imageVector = Icons.Default.Speed,
-                                    contentDescription = "Velocidade",
-                                    tint = if (uiState.playbackSpeed != 1.0f) AccentGold else Color.White
+                                    imageVector = Icons.Default.AspectRatio,
+                                    contentDescription = uiState.resizeMode.label,
+                                    tint = Color.White
                                 )
                             }
 
-                            DropdownMenu(
-                                expanded = showSpeedMenu,
-                                onDismissRequest = { showSpeedMenu = false },
-                                modifier = Modifier.background(DarkSurface)
-                            ) {
-                                listOf(0.5f, 0.75f, 1.0f, 1.25f, 1.5f, 2.0f).forEach { speed ->
-                                    DropdownMenuItem(
-                                        text = {
-                                            Text(
-                                                text = "${speed}x",
-                                                color = if (uiState.playbackSpeed == speed) CineRed else TextPrimary,
-                                                fontWeight = if (uiState.playbackSpeed == speed) FontWeight.Bold else FontWeight.Normal
-                                            )
-                                        },
-                                        onClick = {
-                                            onSpeedChange(speed)
-                                            showSpeedMenu = false
-                                        }
+                            // Speed button
+                            Box {
+                                IconButton(onClick = { showSpeedMenu = true }) {
+                                    Icon(
+                                        imageVector = Icons.Default.Speed,
+                                        contentDescription = "Velocidade",
+                                        tint = if (uiState.playbackSpeed != 1.0f) AccentGold else Color.White
                                     )
+                                }
+
+                                DropdownMenu(
+                                    expanded = showSpeedMenu,
+                                    onDismissRequest = { showSpeedMenu = false },
+                                    modifier = Modifier.background(DarkSurface)
+                                ) {
+                                    listOf(0.5f, 0.75f, 1.0f, 1.25f, 1.5f, 2.0f).forEach { speed ->
+                                        DropdownMenuItem(
+                                            text = {
+                                                Text(
+                                                    text = "${speed}x",
+                                                    color = if (uiState.playbackSpeed == speed) CineRed else TextPrimary,
+                                                    fontWeight = if (uiState.playbackSpeed == speed) FontWeight.Bold else FontWeight.Normal
+                                                )
+                                            },
+                                            onClick = {
+                                                onSpeedChange(speed)
+                                                showSpeedMenu = false
+                                            }
+                                        )
+                                    }
                                 }
                             }
                         }
@@ -303,7 +358,7 @@ fun PlayerOverlay(
                     }
 
                     Surface(
-                        color = CineRed,
+                        color = if (castState.isConnected) AccentGold else CineRed,
                         shape = CircleShape,
                         modifier = Modifier
                             .size(72.dp)
@@ -314,7 +369,7 @@ fun PlayerOverlay(
                             Icon(
                                 imageVector = if (uiState.isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
                                 contentDescription = if (uiState.isPlaying) "Pausar" else "Reproduzir",
-                                tint = Color.White,
+                                tint = if (castState.isConnected) Color.Black else Color.White,
                                 modifier = Modifier.size(40.dp)
                             )
                         }
@@ -367,7 +422,7 @@ fun PlayerOverlay(
                         val durationMs = uiState.duration
 
                         Slider(
-                            value = if (isUserSeeking) sliderValue else uiState.currentPosition.toFloat(),
+                            value = if (isUserSeeking) sliderValue else uiState.currentPosition.toFloat().coerceIn(0f, durationMs.toFloat()),
                             onValueChange = {
                                 isUserSeeking = true
                                 sliderValue = it
@@ -378,8 +433,8 @@ fun PlayerOverlay(
                             },
                             valueRange = 0f..durationMs.toFloat(),
                             colors = SliderDefaults.colors(
-                                thumbColor = CineRed,
-                                activeTrackColor = CineRed,
+                                thumbColor = if (castState.isConnected) AccentGold else CineRed,
+                                activeTrackColor = if (castState.isConnected) AccentGold else CineRed,
                                 inactiveTrackColor = Color.White.copy(alpha = 0.3f)
                             ),
                             modifier = Modifier
@@ -424,7 +479,7 @@ fun PlayerOverlay(
                                 )
                             }
                             Text(
-                                text = "Transmissão contínua em tempo real",
+                                text = if (castState.isConnected) "Transmitindo IPTV via Google Cast" else "Transmissão contínua em tempo real",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = TextSecondary
                             )
@@ -506,7 +561,7 @@ fun TracksSelectionDialog(
                 item {
                     Spacer(modifier = Modifier.height(12.dp))
                     Text(
-                        text = "Legendas",
+                        text = "Legendas (Compatíveis com TV & Chromecast)",
                         style = MaterialTheme.typography.titleMedium,
                         color = CineRed,
                         fontWeight = FontWeight.Bold,

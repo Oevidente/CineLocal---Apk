@@ -1,0 +1,6 @@
+{
+  "summary":  "Plano de correção para o botão e diálogo nativo do Google Cast (MediaRouteButton / CastButtonFactory) com exibição dinâmica e busca precisa por CastMediaControlIntent.",
+  "updatedAt":  "2026-10-02T20:32:51.632738847Z",
+  "requestFeedback":  true,
+  "userFacing":  true
+}

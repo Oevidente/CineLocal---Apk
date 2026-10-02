@@ -10,13 +10,15 @@ import androidx.media3.common.MediaItem
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.PlaybackParameters
 import androidx.media3.common.Player
-import androidx.media3.common.TrackGroup
 import androidx.media3.common.TrackSelectionOverride
 import androidx.media3.common.Tracks
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.ui.AspectRatioFrameLayout
+import com.example.cinelocal.cast.CastManager
+import com.example.cinelocal.cast.CastState
 import com.example.cinelocal.data.model.EpisodeEntity
+import com.example.cinelocal.data.model.IptvChannelEntity
 import com.example.cinelocal.data.model.TrackInfo
 import com.example.cinelocal.data.repository.MediaRepository
 import kotlinx.coroutines.Job
@@ -52,7 +54,9 @@ data class PlayerUiState(
     val selectedSubtitleIndex: Int = -1,
     val errorMessage: String? = null,
     val hasNextEpisode: Boolean = false,
-    val nextEpisodeTitle: String? = null
+    val nextEpisodeTitle: String? = null,
+    val isCasting: Boolean = false,
+    val castDeviceName: String? = null
 )
 
 @OptIn(UnstableApi::class)
@@ -60,6 +64,9 @@ class PlayerViewModel(
     application: Application,
     private val repository: MediaRepository
 ) : AndroidViewModel(application) {
+
+    val castManager: CastManager = CastManager.getInstance(application)
+    val castState: StateFlow<CastState> = castManager.castState
 
     private var exoPlayer: ExoPlayer? = null
     val player: ExoPlayer
@@ -69,9 +76,22 @@ class PlayerViewModel(
     val uiState: StateFlow<PlayerUiState> = _uiState.asStateFlow()
 
     private var progressTrackingJob: Job? = null
-    private var currentEpisodeId: String? = null
-    private var currentMediaId: String? = null
+    private var currentEpisode: EpisodeEntity? = null
+    private var currentChannel: IptvChannelEntity? = null
+    private var currentMediaTitle: String = ""
     private var allEpisodesInSeries: List<EpisodeEntity> = emptyList()
+
+    init {
+        castManager.init()
+        viewModelScope.launch {
+            castState.collect { cState ->
+                _uiState.value = _uiState.value.copy(
+                    isCasting = cState.isConnected,
+                    castDeviceName = cState.deviceName
+                )
+            }
+        }
+    }
 
     private fun createPlayer(): ExoPlayer {
         val context = getApplication<Application>()
@@ -119,8 +139,9 @@ class PlayerViewModel(
         allEpisodes: List<EpisodeEntity> = emptyList(),
         startPositionMs: Long? = null
     ) {
-        currentEpisodeId = episode.id
-        currentMediaId = episode.mediaId
+        currentEpisode = episode
+        currentChannel = null
+        currentMediaTitle = mediaTitle
         allEpisodesInSeries = allEpisodes
 
         val currentIndex = allEpisodes.indexOfFirst { it.id == episode.id }
@@ -132,77 +153,140 @@ class PlayerViewModel(
             isLive = false,
             isBuffering = true,
             hasNextEpisode = nextEp != null,
-            nextEpisodeTitle = nextEp?.title
+            nextEpisodeTitle = nextEp?.title,
+            isCasting = castState.value.isConnected,
+            castDeviceName = castState.value.deviceName
         )
-
-        val uri = Uri.parse(episode.uriString ?: episode.filePath)
-        val mediaItem = MediaItem.fromUri(uri)
 
         val resumePos = startPositionMs ?: (episode.progressSeconds * 1000)
 
-        player.stop()
-        player.setMediaItem(mediaItem)
-        if (resumePos > 0) {
-            player.seekTo(resumePos)
+        if (castState.value.isConnected) {
+            player.pause()
+            castManager.castEpisode(
+                episode = episode,
+                mediaTitle = mediaTitle,
+                startPositionMs = resumePos
+            )
+        } else {
+            val uri = Uri.parse(episode.uriString ?: ("file://" + episode.filePath))
+            val mediaItem = MediaItem.fromUri(uri)
+
+            player.stop()
+            player.setMediaItem(mediaItem)
+            if (resumePos > 0) {
+                player.seekTo(resumePos)
+            }
+            player.prepare()
+            player.play()
         }
-        player.prepare()
-        player.play()
 
         startProgressTracking()
     }
 
     fun playLiveStream(title: String, group: String, streamUrl: String) {
-        currentEpisodeId = null
-        currentMediaId = null
+        currentEpisode = null
+        currentChannel = IptvChannelEntity(
+            id = "live",
+            name = title,
+            group = group,
+            url = streamUrl
+        )
+        currentMediaTitle = title
         allEpisodesInSeries = emptyList()
 
         _uiState.value = PlayerUiState(
             title = title,
             subtitle = "TV Ao Vivo • $group",
             isLive = true,
-            isBuffering = true
+            isBuffering = true,
+            isCasting = castState.value.isConnected,
+            castDeviceName = castState.value.deviceName
         )
 
-        val uri = Uri.parse(streamUrl)
-        val mediaItem = MediaItem.fromUri(uri)
+        if (castState.value.isConnected) {
+            player.pause()
+            currentChannel?.let { castManager.castIptvChannel(it) }
+        } else {
+            val uri = Uri.parse(streamUrl)
+            val mediaItem = MediaItem.fromUri(uri)
 
-        player.stop()
-        player.setMediaItem(mediaItem)
-        player.prepare()
-        player.play()
+            player.stop()
+            player.setMediaItem(mediaItem)
+            player.prepare()
+            player.play()
+        }
 
         startProgressTracking()
+    }
+
+    fun triggerCastForCurrentMedia() {
+        if (!castState.value.isConnected) return
+
+        if (currentEpisode != null) {
+            val pos = if (exoPlayer != null && exoPlayer!!.currentPosition > 0) exoPlayer!!.currentPosition else 0
+            player.pause()
+            castManager.castEpisode(
+                episode = currentEpisode!!,
+                mediaTitle = currentMediaTitle,
+                startPositionMs = pos
+            )
+        } else if (currentChannel != null) {
+            player.pause()
+            castManager.castIptvChannel(currentChannel!!)
+        }
     }
 
     private fun startProgressTracking() {
         progressTrackingJob?.cancel()
         progressTrackingJob = viewModelScope.launch {
             while (isActive) {
-                exoPlayer?.let { p ->
-                    val pos = p.currentPosition
-                    val dur = if (p.duration != C.TIME_UNSET && p.duration > 0) p.duration else 0
-                    val buffered = p.bufferedPosition
-
+                if (castState.value.isConnected) {
+                    val cState = castState.value
                     _uiState.value = _uiState.value.copy(
-                        currentPosition = pos,
-                        duration = dur,
-                        bufferedPosition = buffered
+                        currentPosition = cState.currentPosition,
+                        duration = cState.duration,
+                        isPlaying = cState.isPlaying,
+                        isBuffering = cState.isBuffering
                     )
 
-                    // Save watch progress to database periodically
-                    val epId = currentEpisodeId
-                    val medId = currentMediaId
-                    if (epId != null && medId != null && dur > 0) {
-                        val progressSec = pos / 1000
-                        val durationSec = dur / 1000
+                    val ep = currentEpisode
+                    if (ep != null && cState.duration > 0) {
+                        val progressSec = cState.currentPosition / 1000
+                        val durationSec = cState.duration / 1000
                         val isWatched = progressSec > (durationSec * 0.9)
                         repository.updatePlaybackProgress(
-                            episodeId = epId,
-                            mediaId = medId,
+                            episodeId = ep.id,
+                            mediaId = ep.mediaId,
                             progressSeconds = progressSec,
                             durationSeconds = durationSec,
                             watched = isWatched
                         )
+                    }
+                } else {
+                    exoPlayer?.let { p ->
+                        val pos = p.currentPosition
+                        val dur = if (p.duration != C.TIME_UNSET && p.duration > 0) p.duration else 0
+                        val buffered = p.bufferedPosition
+
+                        _uiState.value = _uiState.value.copy(
+                            currentPosition = pos,
+                            duration = dur,
+                            bufferedPosition = buffered
+                        )
+
+                        val ep = currentEpisode
+                        if (ep != null && dur > 0) {
+                            val progressSec = pos / 1000
+                            val durationSec = dur / 1000
+                            val isWatched = progressSec > (durationSec * 0.9)
+                            repository.updatePlaybackProgress(
+                                episodeId = ep.id,
+                                mediaId = ep.mediaId,
+                                progressSeconds = progressSec,
+                                durationSeconds = durationSec,
+                                watched = isWatched
+                            )
+                        }
                     }
                 }
                 delay(1000)
@@ -211,21 +295,37 @@ class PlayerViewModel(
     }
 
     fun togglePlayPause() {
-        exoPlayer?.let {
-            if (it.isPlaying) it.pause() else it.play()
+        if (castState.value.isConnected) {
+            castManager.togglePlayPause()
+        } else {
+            exoPlayer?.let {
+                if (it.isPlaying) it.pause() else it.play()
+            }
         }
     }
 
     fun seekTo(positionMs: Long) {
-        exoPlayer?.seekTo(positionMs.coerceAtLeast(0))
+        if (castState.value.isConnected) {
+            castManager.seekTo(positionMs)
+        } else {
+            exoPlayer?.seekTo(positionMs.coerceAtLeast(0))
+        }
     }
 
     fun seekForward() {
-        exoPlayer?.seekForward()
+        if (castState.value.isConnected) {
+            castManager.seekForward10()
+        } else {
+            exoPlayer?.seekForward()
+        }
     }
 
     fun seekBack() {
-        exoPlayer?.seekBack()
+        if (castState.value.isConnected) {
+            castManager.seekBack10()
+        } else {
+            exoPlayer?.seekBack()
+        }
     }
 
     fun setPlaybackSpeed(speed: Float) {
@@ -245,7 +345,7 @@ class PlayerViewModel(
     }
 
     fun playNextEpisode() {
-        val currentEp = allEpisodesInSeries.find { it.id == currentEpisodeId } ?: return
+        val currentEp = allEpisodesInSeries.find { it.id == currentEpisode?.id } ?: return
         val currentIndex = allEpisodesInSeries.indexOf(currentEp)
         if (currentIndex in 0 until (allEpisodesInSeries.size - 1)) {
             val next = allEpisodesInSeries[currentIndex + 1]
@@ -327,7 +427,6 @@ class PlayerViewModel(
     fun selectSubtitleTrack(trackIndex: Int) {
         val p = exoPlayer ?: return
         if (trackIndex == -1) {
-            // Disable subtitles
             p.trackSelectionParameters = p.trackSelectionParameters
                 .buildUpon()
                 .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, true)
@@ -364,6 +463,7 @@ class PlayerViewModel(
         progressTrackingJob?.cancel()
         exoPlayer?.release()
         exoPlayer = null
+        castManager.disconnect()
     }
 
     override fun onCleared() {

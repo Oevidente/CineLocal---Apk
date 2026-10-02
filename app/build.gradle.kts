@@ -57,6 +57,7 @@ dependencies {
     implementation(libs.androidx.material3)
     implementation(libs.androidx.material.icons.extended)
     implementation(libs.androidx.navigation.compose)
+    implementation(libs.androidx.documentfile)
 
     // Room
     implementation(libs.androidx.room.runtime)
@@ -79,6 +80,10 @@ dependencies {
     implementation(libs.gson)
     implementation(libs.kotlinx.serialization.json)
     implementation(libs.kotlinx.coroutines.android)
+
+    // Google Cast & MediaRouter
+    implementation(libs.play.services.cast.framework)
+    implementation(libs.androidx.mediarouter)
 
     debugImplementation(libs.androidx.ui.tooling)
     debugImplementation(libs.androidx.ui.test.manifest)

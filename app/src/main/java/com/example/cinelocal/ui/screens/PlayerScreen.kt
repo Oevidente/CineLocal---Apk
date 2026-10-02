@@ -1,7 +1,6 @@
 package com.example.cinelocal.ui.screens
 
 import android.app.Activity
-import android.content.pm.ActivityInfo
 import android.view.ViewGroup
 import android.view.WindowManager
 import androidx.activity.compose.BackHandler
@@ -12,6 +11,9 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
@@ -21,6 +23,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.ui.PlayerView
 import com.example.cinelocal.player.PlayerViewModel
+import com.example.cinelocal.ui.components.CastDeviceDialog
 import com.example.cinelocal.ui.components.PlayerOverlay
 
 @OptIn(UnstableApi::class)
@@ -32,6 +35,9 @@ fun PlayerScreen(
 ) {
     val context = LocalContext.current
     val uiState by playerViewModel.uiState.collectAsStateWithLifecycle()
+    val castState by playerViewModel.castState.collectAsStateWithLifecycle()
+
+    var showCastDialog by remember { mutableStateOf(false) }
 
     BackHandler {
         onBackClick()
@@ -53,29 +59,32 @@ fun PlayerScreen(
             .background(Color.Black)
             .testTag("player_screen_container")
     ) {
-        // ExoPlayer Native View
-        AndroidView(
-            factory = { ctx ->
-                PlayerView(ctx).apply {
-                    layoutParams = ViewGroup.LayoutParams(
-                        ViewGroup.LayoutParams.MATCH_PARENT,
-                        ViewGroup.LayoutParams.MATCH_PARENT
-                    )
-                    useController = false
-                    player = playerViewModel.player
-                    resizeMode = uiState.resizeMode.mode
-                }
-            },
-            update = { playerView ->
-                playerView.player = playerViewModel.player
-                playerView.resizeMode = uiState.resizeMode.mode
-            },
-            modifier = Modifier.fillMaxSize()
-        )
+        // ExoPlayer Native View (active when not casting or paused during cast)
+        if (!castState.isConnected) {
+            AndroidView(
+                factory = { ctx ->
+                    PlayerView(ctx).apply {
+                        layoutParams = ViewGroup.LayoutParams(
+                            ViewGroup.LayoutParams.MATCH_PARENT,
+                            ViewGroup.LayoutParams.MATCH_PARENT
+                        )
+                        useController = false
+                        player = playerViewModel.player
+                        resizeMode = uiState.resizeMode.mode
+                    }
+                },
+                update = { playerView ->
+                    playerView.player = playerViewModel.player
+                    playerView.resizeMode = uiState.resizeMode.mode
+                },
+                modifier = Modifier.fillMaxSize()
+            )
+        }
 
         // Custom Overlay Controls
         PlayerOverlay(
             uiState = uiState,
+            castState = castState,
             onBackClick = onBackClick,
             onPlayPauseClick = { playerViewModel.togglePlayPause() },
             onSeekBack = { playerViewModel.seekBack() },
@@ -86,7 +95,23 @@ fun PlayerScreen(
             onSelectAudioTrack = { idx -> playerViewModel.selectAudioTrack(idx) },
             onSelectSubtitleTrack = { idx -> playerViewModel.selectSubtitleTrack(idx) },
             onNextEpisodeClick = { playerViewModel.playNextEpisode() },
+            onCastClick = {
+                playerViewModel.castManager.startDiscovery()
+                showCastDialog = true
+            },
             modifier = Modifier.fillMaxSize()
         )
+
+        if (showCastDialog) {
+            CastDeviceDialog(
+                castState = castState,
+                onSelectDevice = { routeId ->
+                    playerViewModel.castManager.selectDevice(routeId)
+                    playerViewModel.triggerCastForCurrentMedia()
+                },
+                onDisconnect = { playerViewModel.castManager.disconnect() },
+                onDismiss = { showCastDialog = false }
+            )
+        }
     }
 }
