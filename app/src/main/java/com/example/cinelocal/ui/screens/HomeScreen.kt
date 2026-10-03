@@ -24,6 +24,7 @@ import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Tv
+import androidx.compose.material.icons.filled.VideoFile
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -75,6 +76,7 @@ fun HomeScreen(
     onFavoriteToggle: (MediaItemEntity) -> Unit,
     onChannelFavoriteToggle: (IptvChannelEntity) -> Unit,
     onAddMediaClick: () -> Unit,
+    onPickFilesClick: () -> Unit = {},
     onOpenPcNetwork: () -> Unit = {},
     onNavigateToMovies: () -> Unit,
     onNavigateToSeries: () -> Unit,
@@ -335,32 +337,46 @@ fun HomeScreen(
 
                         Spacer(modifier = Modifier.height(4.dp))
 
-                        Row(
+                        Column(
                             modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
                             Button(
-                                onClick = onAddMediaClick,
+                                onClick = onPickFilesClick,
                                 colors = ButtonDefaults.buttonColors(containerColor = CineRed),
-                                modifier = Modifier.weight(1f)
+                                modifier = Modifier.fillMaxWidth()
                             ) {
-                                Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp))
-                                Spacer(modifier = Modifier.width(4.dp))
-                                Text("Adicionar", fontSize = 12.sp, color = Color.White)
+                                Icon(Icons.Default.VideoFile, contentDescription = null, modifier = Modifier.size(18.dp))
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text("Selecionar Vídeo(s) do Celular", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = Color.White)
                             }
 
-                            OutlinedButton(
-                                onClick = onOpenPcNetwork,
-                                modifier = Modifier.weight(1f)
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
                             ) {
-                                Icon(
-                                    imageVector = Icons.Default.Computer,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(16.dp),
-                                    tint = Color(0xFF38BDF8)
-                                )
-                                Spacer(modifier = Modifier.width(4.dp))
-                                Text("Conectar PC", fontSize = 12.sp, color = TextPrimary)
+                                OutlinedButton(
+                                    onClick = onAddMediaClick,
+                                    modifier = Modifier.weight(1f)
+                                ) {
+                                    Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp))
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text("Mais Opções", fontSize = 12.sp, color = TextPrimary)
+                                }
+
+                                OutlinedButton(
+                                    onClick = onOpenPcNetwork,
+                                    modifier = Modifier.weight(1f)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Computer,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(16.dp),
+                                        tint = Color(0xFF38BDF8)
+                                    )
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text("Conectar PC", fontSize = 12.sp, color = TextPrimary)
+                                }
                             }
                         }
                     }

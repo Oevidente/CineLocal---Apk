@@ -36,6 +36,7 @@ import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Tv
+import androidx.compose.material.icons.filled.VideoFile
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
@@ -344,6 +345,25 @@ fun CineLocalApp(
                                     }
 
                                     IconButton(
+                                        onClick = {
+                                            filesPickerLauncher.launch(
+                                                arrayOf(
+                                                    "video/*",
+                                                    "application/x-matroska",
+                                                    "application/octet-stream"
+                                                )
+                                            )
+                                        },
+                                        modifier = Modifier.testTag("quick_video_picker_button")
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.VideoFile,
+                                            contentDescription = "Selecionar Vídeo(s)",
+                                            tint = CineRed
+                                        )
+                                    }
+
+                                    IconButton(
                                         onClick = { showAddDialog = true },
                                         modifier = Modifier.testTag("add_media_top_button")
                                     ) {
@@ -417,13 +437,15 @@ fun CineLocalApp(
                             label = {
                                 Text(
                                     text = tab.label,
-                                    fontSize = 9.sp,
+                                    fontSize = 8.5.sp,
+                                    letterSpacing = (-0.3).sp,
                                     maxLines = 1,
                                     softWrap = false,
                                     overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
                                     fontWeight = if (activeTab == tab) FontWeight.Bold else FontWeight.Normal
                                 )
                             },
+                            alwaysShowLabel = true,
                             colors = NavigationBarItemDefaults.colors(
                                 selectedIconColor = CineRed,
                                 selectedTextColor = CineRed,
@@ -514,6 +536,15 @@ fun CineLocalApp(
                             onFavoriteToggle = { media -> mainViewModel.toggleMediaFavorite(media) },
                             onChannelFavoriteToggle = { channel -> mainViewModel.toggleChannelFavorite(channel) },
                             onAddMediaClick = { showAddDialog = true },
+                            onPickFilesClick = {
+                                filesPickerLauncher.launch(
+                                    arrayOf(
+                                        "video/*",
+                                        "application/x-matroska",
+                                        "application/octet-stream"
+                                    )
+                                )
+                            },
                             onOpenPcNetwork = { mainViewModel.openSmbExplorer() },
                             onNavigateToMovies = { activeTab = AppTab.MOVIES },
                             onNavigateToSeries = { activeTab = AppTab.SERIES },

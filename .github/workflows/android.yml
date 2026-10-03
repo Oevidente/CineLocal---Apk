@@ -50,6 +50,23 @@ jobs:
             echo "::warning::Sem KEYSTORE_BASE64: assinando com chave de debug padrao."
           fi
 
+      - name: Guard - funcionalidades essenciais
+        run: |
+          fail=0
+          check() { # $1=padrão  $2=arquivo  $3=descrição
+            if ! grep -q -- "$1" "$2"; then
+              echo "::error::Funcionalidade removida: $3 (esperado '$1' em $2)"
+              fail=1
+            fi
+          }
+          B=app/src/main/java/com/example/cinelocal
+          check "OpenMultipleDocuments"      $B/MainActivity.kt                  "seleção de vídeo(s) solto(s)"
+          check "OpenDocumentTree"           $B/MainActivity.kt                  "seleção de pasta"
+          check "Selecionar Vídeo(s)"        $B/ui/components/AddMediaDialog.kt  "botão Selecionar Vídeo(s)"
+          check "addStandaloneVideoFiles"    $B/data/repository/MediaRepository.kt "gravação de vídeos soltos"
+          check "softWrap = false"           $B/MainActivity.kt                  "rótulo da barra em uma linha"
+          exit $fail
+
       - name: Build debug APK
         env:
           KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
