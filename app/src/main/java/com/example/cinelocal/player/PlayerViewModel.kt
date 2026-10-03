@@ -386,19 +386,31 @@ class PlayerViewModel(
                 }
                 is ResolveResult.Fail -> {
                     currentSourceUri = null
-                    _uiState.value = _uiState.value.copy(
-                        errorMessage = resolveResult.reason,
-                        errorDetails = buildString {
-                            appendLine("Erro: ${resolveResult.reason}")
-                            appendLine("Episódio: ${episode.title} (ID: ${episode.id})")
-                            appendLine("Mídia: $mediaTitle (ID: ${episode.mediaId})")
-                            episode.streamUrl?.let { appendLine("streamUrl: $it") }
-                            episode.uriString?.let { appendLine("uriString: $it") }
-                            episode.filePath?.let { appendLine("filePath: $it") }
-                        },
-                        canRetry = false,
-                        isBuffering = false
-                    )
+                    val isMagnet = (episode.streamUrl?.startsWith("magnet:", ignoreCase = true) == true) ||
+                        (episode.uriString?.startsWith("magnet:", ignoreCase = true) == true) ||
+                        (media?.streamUrl?.startsWith("magnet:", ignoreCase = true) == true)
+
+                    if (isMagnet) {
+                        _uiState.value = _uiState.value.copy(
+                            isBuffering = true,
+                            errorMessage = null,
+                            errorDetails = null
+                        )
+                    } else {
+                        _uiState.value = _uiState.value.copy(
+                            errorMessage = resolveResult.reason,
+                            errorDetails = buildString {
+                                appendLine("Erro: ${resolveResult.reason}")
+                                appendLine("Episódio: ${episode.title} (ID: ${episode.id})")
+                                appendLine("Mídia: $mediaTitle (ID: ${episode.mediaId})")
+                                episode.streamUrl?.let { appendLine("streamUrl: $it") }
+                                episode.uriString?.let { appendLine("uriString: $it") }
+                                episode.filePath?.let { appendLine("filePath: $it") }
+                            },
+                            canRetry = false,
+                            isBuffering = false
+                        )
+                    }
                 }
             }
         }

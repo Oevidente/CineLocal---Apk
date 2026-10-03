@@ -96,13 +96,7 @@ object PlaybackSourceResolver {
                     )
                 )
             } else {
-                return ResolveResult.Ok(
-                    ResolvedSource(
-                        uri = Uri.parse("torrent://${com.example.cinelocal.data.torrent.TorrentUtils.extractInfoHash(magnetUri) ?: "p2p"}"),
-                        mimeType = MimeTypes.VIDEO_MP4,
-                        isLive = false
-                    )
-                )
+                return ResolveResult.Fail("Buscando metadados do enxame BitTorrent... Aguarde a conexão com os peers.")
             }
         }
 

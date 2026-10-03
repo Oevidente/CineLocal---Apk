@@ -1,0 +1,16 @@
+{
+  "name": "CineLocal",
+  "short_name": "CineLocal",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "background_color": "#121212",
+  "theme_color": "#E50914",
+  "description": "Biblioteca de Mídia Offline & IPTV CineLocal",
+  "icons": [
+    {
+      "src": "app/src/main/res/drawable/app_icon_cinelocal_1790971004599.jpg",
+      "sizes": "512x512",
+      "type": "image/jpeg"
+    }
+  ]
+}
