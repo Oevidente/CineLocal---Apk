@@ -197,7 +197,7 @@ fun TorrentsScreen(
                                 text = "1. Abra qualquer site de torrent no navegador do celular ou PC (YTS, 1337x, Torrent Galaxy, PirateBay, etc).\n" +
                                         "2. Clique com o botão direito ou pressione e segure no botão 'Magnet' do filme e escolha 'Copiar endereço do link'.\n" +
                                         "3. Abra o CineLocal e clique em 'Colar Magnet & Reproduzir' ou 'Adicionar'.\n" +
-                                        "4. O player fará a conexão instantânea via WebTorrent gateway e iniciará o filme!",
+                                        "4. O player fará a conexão P2P no enxame BitTorrent e iniciará a transmissão do filme!",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = TextSecondary,
                                 fontSize = 11.sp,

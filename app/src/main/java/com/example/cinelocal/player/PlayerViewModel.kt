@@ -126,6 +126,50 @@ class PlayerViewModel(
                 wasConnected = cState.isConnected
             }
         }
+        viewModelScope.launch {
+            com.example.cinelocal.data.torrent.TorrentStreamEngine.status.collect { torrentStatus ->
+                if (_uiState.value.isTorrent) {
+                    val file = torrentStatus.currentVideoFile
+                    if (file != null && file.exists() && file.length() > 0) {
+                        val fileUri = Uri.fromFile(file)
+                        if (currentSourceUri != fileUri) {
+                            currentSourceUri = fileUri
+                            if (castManager.hasActiveSession()) {
+                                val currentEp = currentEpisode
+                                if (currentEp != null) {
+                                    castManager.castEpisode(
+                                        episode = currentEp,
+                                        mediaTitle = currentMediaTitle,
+                                        startPositionMs = 0L
+                                    ) { ok, err ->
+                                        if (ok) player.pause()
+                                        else _uiState.value = _uiState.value.copy(errorMessage = err ?: "Falha ao transmitir torrent")
+                                    }
+                                }
+                            } else {
+                                val mediaItem = MediaItem.Builder()
+                                    .setUri(fileUri)
+                                    .setMimeType(MimeTypes.VIDEO_MP4)
+                                    .build()
+                                player.stop()
+                                player.setMediaItem(mediaItem)
+                                player.prepare()
+                                player.play()
+                            }
+                        }
+                    }
+
+                    if (torrentStatus.error != null) {
+                        _uiState.value = _uiState.value.copy(
+                            errorMessage = torrentStatus.error,
+                            errorDetails = "Erro no enxame P2P Torrent: ${torrentStatus.error}",
+                            isBuffering = false,
+                            canRetry = true
+                        )
+                    }
+                }
+            }
+        }
     }
 
     private fun onCastSessionStarted() {
@@ -875,7 +919,7 @@ class PlayerViewModel(
         exoPlayer?.release()
         exoPlayer = null
         castManager.disconnect()
-        com.example.cinelocal.data.torrent.NativeP2PTorrentEngine.stop(getApplication())
+        com.example.cinelocal.data.torrent.TorrentStreamEngine.stop()
     }
 
     override fun onCleared() {

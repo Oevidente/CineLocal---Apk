@@ -19,8 +19,8 @@ android {
         val sha = System.getenv("GITHUB_SHA")?.take(7) ?: "local"
 
         // versionCode incrementado para permitir atualizações diretas
-        versionCode = if (runNumber != null) 201 + runNumber else 201
-        versionName = "1.3.1"
+        versionCode = if (runNumber != null) 202 + runNumber else 202
+        versionName = "1.3.2"
 
         buildConfigField("String", "GIT_SHA", "\"$sha\"")
         buildConfigField("int", "BUILD_NUMBER", "${runNumber ?: 0}")
@@ -111,6 +111,9 @@ dependencies {
 
     // SMB Protocol (Windows / PC Local Network Share)
     implementation(libs.smbj)
+
+    // Real Torrent P2P Engine
+    implementation(libs.torrentstream.android)
 
     debugImplementation(libs.androidx.ui.tooling)
     debugImplementation(libs.androidx.ui.test.manifest)

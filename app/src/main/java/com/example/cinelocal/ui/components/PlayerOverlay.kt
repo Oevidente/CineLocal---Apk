@@ -398,11 +398,12 @@ fun PlayerOverlay(
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis
                             )
-                            val p2pState by com.example.cinelocal.data.torrent.NativeP2PTorrentEngine.status.collectAsStateWithLifecycle()
+                            val p2pState by com.example.cinelocal.data.torrent.TorrentStreamEngine.status.collectAsStateWithLifecycle()
                             if (p2pState.isStreaming) {
-                                val speedMb = String.format("%.1f MB/s", p2pState.downloadSpeedBps / (1024.0 * 1024.0))
+                                val speedText = if (p2pState.downloadSpeedBps > 0) String.format("%.1f MB/s", p2pState.downloadSpeedBps / (1024.0 * 1024.0)) else "—"
+                                val peersText = if (p2pState.peersCount > 0) "${p2pState.peersCount} Peers" else "—"
                                 Text(
-                                    text = "⚡ P2P: ${p2pState.peersCount} Peers • $speedMb • Buffer ${p2pState.bufferedPercent}%",
+                                    text = "⚡ P2P: $peersText • $speedText • Buffer ${p2pState.bufferedPercent}%",
                                     style = MaterialTheme.typography.bodySmall,
                                     color = Color(0xFF38BDF8),
                                     fontWeight = FontWeight.Bold,

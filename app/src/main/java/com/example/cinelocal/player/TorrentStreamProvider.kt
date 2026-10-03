@@ -1,7 +1,9 @@
 package com.example.cinelocal.player
 
+import android.content.Context
 import com.example.cinelocal.data.torrent.TorrentStreamEngine
-import com.example.cinelocal.data.torrent.TorrentUtils
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.withTimeoutOrNull
 
 data class TorrentProgress(
     val peers: Int = 0,
@@ -23,56 +25,76 @@ data class PreparedTorrent(
 
 interface TorrentStreamProvider {
     /** Resolve metadados (lista de arquivos de vídeo). Timeout padrão: 60 s. */
-    suspend fun prepare(magnetUri: String, onProgress: (TorrentProgress) -> Unit): PreparedTorrent
+    suspend fun prepare(context: Context, magnetUri: String, onProgress: (TorrentProgress) -> Unit): PreparedTorrent
 
-    /** URL http://127.0.0.1:<porta>/m/<token> servida pelo MediaProxyServer. */
+    /** Retorna a URL de vídeo ou caminho de arquivo baixado pelo motor de torrent. */
     fun streamUrl(file: TorrentVideoFile): String
 
     suspend fun stop()
 }
 
 /**
- * Provedor ativo de streaming de Torrent Magnet no CineLocal.
+ * Provedor ativo de streaming de Torrent Magnet real no CineLocal.
  */
 class DefaultTorrentStreamProvider : TorrentStreamProvider {
 
     private var currentMagnet: String = ""
 
     override suspend fun prepare(
+        context: Context,
         magnetUri: String,
         onProgress: (TorrentProgress) -> Unit
     ): PreparedTorrent {
         currentMagnet = magnetUri
-        val parsed = TorrentUtils.parseMagnetUri(magnetUri)
-        val name = parsed?.displayName ?: "Vídeo Torrent"
-        val totalBytes = parsed?.exactLength ?: (900L * 1024L * 1024L)
+        
+        TorrentStreamEngine.startStream(context, magnetUri)
 
-        onProgress(
-            TorrentProgress(
-                peers = 4,
-                downloadBps = 1024 * 1024 * 2L,
-                bufferedPercent = 10,
-                stage = "Conectado aos Trackers"
-            )
-        )
+        val result = withTimeoutOrNull(60_000L) {
+            while (true) {
+                val st = TorrentStreamEngine.status.value
+                onProgress(
+                    TorrentProgress(
+                        peers = st.peersCount,
+                        downloadBps = st.downloadSpeedBps,
+                        bufferedPercent = st.bufferedPercent,
+                        stage = st.stage
+                    )
+                )
 
-        val files = mutableListOf<TorrentVideoFile>()
-        files.add(
-            TorrentVideoFile(
-                index = 0,
-                name = name,
-                sizeBytes = totalBytes
-            )
-        )
+                if (st.currentVideoFile != null) {
+                    val file = st.currentVideoFile
+                    val videoFile = TorrentVideoFile(
+                        index = 0,
+                        name = file.name,
+                        sizeBytes = file.length()
+                    )
+                    return@withTimeoutOrNull PreparedTorrent(
+                        files = listOf(videoFile),
+                        selectedFile = videoFile
+                    )
+                }
 
-        return PreparedTorrent(
-            files = files,
-            selectedFile = files.firstOrNull()
-        )
+                if (st.error != null) {
+                    throw Exception(st.error)
+                }
+
+                delay(500)
+            }
+            @Suppress("UNREACHABLE_CODE")
+            null
+        }
+
+        if (result == null) {
+            TorrentStreamEngine.stop()
+            throw IllegalStateException("Sem fontes (peers) ou tempo esgotado para resolver o torrent.")
+        }
+
+        return result
     }
 
     override fun streamUrl(file: TorrentVideoFile): String {
-        return TorrentStreamEngine.getStreamUrl(currentMagnet, file.index)
+        val st = TorrentStreamEngine.status.value
+        return st.currentVideoFile?.absolutePath ?: ""
     }
 
     override suspend fun stop() {

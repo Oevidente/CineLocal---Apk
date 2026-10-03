@@ -73,6 +73,10 @@ kotlinx-coroutines-android = { group = "org.jetbrains.kotlinx", name = "kotlinx-
 # SMB Protocol for PC network sharing
 smbj = { group = "com.hierynomus", name = "smbj", version.ref = "smbj" }
 
+# Torrent Engine
+torrentstream-android = { group = "com.github.TorrentStream", name = "TorrentStream-Android", version = "2.8.0" }
+
+
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }
 kotlin-android = { id = "org.jetbrains.kotlin.android", version.ref = "kotlin" }

@@ -1,5 +1,9 @@
+@file:OptIn(androidx.media3.common.util.UnstableApi::class)
+
 package com.example.cinelocal.player
 
+import androidx.annotation.OptIn
+import androidx.media3.common.util.UnstableApi
 import android.content.Context
 import android.net.Uri
 import android.provider.DocumentsContract
@@ -81,14 +85,25 @@ object PlaybackSourceResolver {
             ?: if (hasMagnetCandidate) (media?.streamUrl ?: ep?.streamUrl) else null
 
         if (magnetUri != null && magnetUri.startsWith("magnet:", ignoreCase = true)) {
-            val streamUrl = com.example.cinelocal.data.torrent.NativeP2PTorrentEngine.prepareStream(context, magnetUri)
-            return ResolveResult.Ok(
-                ResolvedSource(
-                    uri = Uri.parse(streamUrl),
-                    mimeType = androidx.media3.common.MimeTypes.VIDEO_MP4,
-                    isLive = false
+            com.example.cinelocal.data.torrent.TorrentStreamEngine.startStream(context, magnetUri)
+            val currentFile = com.example.cinelocal.data.torrent.TorrentStreamEngine.status.value.currentVideoFile
+            if (currentFile != null && currentFile.exists()) {
+                return ResolveResult.Ok(
+                    ResolvedSource(
+                        uri = Uri.fromFile(currentFile),
+                        mimeType = inferMimeType(currentFile.name) ?: MimeTypes.VIDEO_MP4,
+                        isLive = false
+                    )
                 )
-            )
+            } else {
+                return ResolveResult.Ok(
+                    ResolvedSource(
+                        uri = Uri.parse("torrent://${com.example.cinelocal.data.torrent.TorrentUtils.extractInfoHash(magnetUri) ?: "p2p"}"),
+                        mimeType = MimeTypes.VIDEO_MP4,
+                        isLive = false
+                    )
+                )
+            }
         }
 
         return ResolveResult.Fail("Este item não tem fonte de vídeo.")
