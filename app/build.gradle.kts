@@ -18,9 +18,9 @@ android {
         val runNumber = System.getenv("GITHUB_RUN_NUMBER")?.toIntOrNull()
         val sha = System.getenv("GITHUB_SHA")?.take(7) ?: "local"
 
-        // versionCode sempre cresce no CI; builds locais ficam em 3
-        versionCode = if (runNumber != null) 100 + runNumber else 3
-        versionName = "1.2.0"
+        // versionCode incrementado para permitir atualizações diretas
+        versionCode = if (runNumber != null) 200 + runNumber else 200
+        versionName = "1.3.0"
 
         buildConfigField("String", "GIT_SHA", "\"$sha\"")
         buildConfigField("int", "BUILD_NUMBER", "${runNumber ?: 0}")
