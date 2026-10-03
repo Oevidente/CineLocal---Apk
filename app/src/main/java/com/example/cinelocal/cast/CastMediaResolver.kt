@@ -32,7 +32,12 @@ object CastMediaResolver {
         val scheme = uri.scheme?.lowercase() ?: ""
 
         if (scheme == "http" || scheme == "https") {
-            val urlStr = uri.toString()
+            var urlStr = uri.toString()
+            if (urlStr.startsWith("http://127.0.0.1", ignoreCase = true) || urlStr.startsWith("http://localhost", ignoreCase = true)) {
+                val wifiIp = com.example.cinelocal.data.torrent.LocalNetworkUtils.getLocalIpAddress(context)
+                urlStr = urlStr.replace("127.0.0.1", wifiIp).replace("localhost", wifiIp)
+            }
+
             val mime = when {
                 urlStr.contains(".m3u8", ignoreCase = true) -> "application/x-mpegURL"
                 urlStr.contains(".mpd", ignoreCase = true) -> "application/dash+xml"
@@ -43,9 +48,10 @@ object CastMediaResolver {
                 url = urlStr,
                 mimeType = mime,
                 streamType = if (source.isLive) MediaInfo.STREAM_TYPE_LIVE else MediaInfo.STREAM_TYPE_BUFFERED,
-                isLocal = false
+                isLocal = true
             )
         }
+
 
         // Local URI (content:// ou file://) -> registrar no MediaProxyServer
         val detectedMime = detectMimeType(context, uri)

@@ -1,6 +1,6 @@
 {
-  "summary":  "Plano para ativação e suporte completo a Torrent Magnet no CineLocal, com streaming interno sequencial, seletor de episódios/arquivos de séries e opção de abrir no Flud/LibreTorrent.",
-  "updatedAt":  "2026-10-03T17:15:26.611447890Z",
+  "summary":  "Plano para implementação do Motor P2P Nativo de Torrent integrado com streaming sequencial, cache temporário e suporte total a Chromecast/Google Cast.",
+  "updatedAt":  "2026-10-03T17:34:58.270482656Z",
   "requestFeedback":  true,
   "userFacing":  true
 }

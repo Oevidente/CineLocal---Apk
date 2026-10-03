@@ -81,7 +81,7 @@ object PlaybackSourceResolver {
             ?: if (hasMagnetCandidate) (media?.streamUrl ?: ep?.streamUrl) else null
 
         if (magnetUri != null && magnetUri.startsWith("magnet:", ignoreCase = true)) {
-            val streamUrl = com.example.cinelocal.data.torrent.TorrentStreamEngine.getStreamUrl(magnetUri)
+            val streamUrl = com.example.cinelocal.data.torrent.NativeP2PTorrentEngine.prepareStream(context, magnetUri)
             return ResolveResult.Ok(
                 ResolvedSource(
                     uri = Uri.parse(streamUrl),
@@ -93,6 +93,8 @@ object PlaybackSourceResolver {
 
         return ResolveResult.Fail("Este item não tem fonte de vídeo.")
     }
+
+
 
 
     /**

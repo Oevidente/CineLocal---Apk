@@ -715,6 +715,7 @@ class PlayerViewModel(
         exoPlayer?.release()
         exoPlayer = null
         castManager.disconnect()
+        com.example.cinelocal.data.torrent.NativeP2PTorrentEngine.stop(getApplication())
     }
 
     override fun onCleared() {
@@ -722,3 +723,4 @@ class PlayerViewModel(
         releasePlayer()
     }
 }
+

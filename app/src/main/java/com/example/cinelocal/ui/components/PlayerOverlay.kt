@@ -66,6 +66,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.material.icons.filled.Audiotrack
 import androidx.compose.material.icons.filled.ContentCopy
+import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.Button
@@ -78,6 +79,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import android.widget.Toast
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.cinelocal.data.model.TrackInfo
 import com.example.cinelocal.cast.CastState
 import com.example.cinelocal.player.PlayerUiState
@@ -199,6 +201,8 @@ fun PlayerOverlay(
             val clipboardManager = LocalClipboardManager.current
             val detailsText = uiState.errorDetails ?: errorMsg
 
+            val isTorrent = detailsText.contains("magnet:?", ignoreCase = true) || errorMsg.contains("magnet", ignoreCase = true)
+
             Box(
                 modifier = Modifier
                     .fillMaxSize()
@@ -211,9 +215,9 @@ fun PlayerOverlay(
                     modifier = Modifier.fillMaxWidth(0.9f)
                 ) {
                     Text(
-                        text = "Erro na Reprodução",
+                        text = if (isTorrent) "Reprodução de Torrent P2P" else "Erro na Reprodução",
                         style = MaterialTheme.typography.titleLarge,
-                        color = CineRed,
+                        color = if (isTorrent) Color(0xFF38BDF8) else CineRed,
                         fontWeight = FontWeight.Bold
                     )
                     Spacer(modifier = Modifier.height(12.dp))
@@ -229,7 +233,22 @@ fun PlayerOverlay(
                         horizontalArrangement = Arrangement.spacedBy(10.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        if (uiState.canRetry) {
+                        if (isTorrent) {
+                            val magnetUrl = detailsText.lines().find { it.contains("magnet:?", ignoreCase = true) }
+                                ?.substringAfter("streamUrl: ")
+                                ?: detailsText.substringAfter("magnet:?").let { "magnet:?$it" }
+
+                            Button(
+                                onClick = {
+                                    com.example.cinelocal.data.torrent.TorrentLaunchHelper.openInExternalTorrentApp(context, magnetUrl)
+                                },
+                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0284C7))
+                            ) {
+                                Icon(Icons.Default.Download, contentDescription = null, modifier = Modifier.size(18.dp), tint = Color.White)
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text("Abrir no App Torrent", color = Color.White, fontWeight = FontWeight.Bold)
+                            }
+                        } else if (uiState.canRetry) {
                             Button(
                                 onClick = onRetryClick,
                                 colors = ButtonDefaults.buttonColors(containerColor = CineRed)
@@ -241,32 +260,9 @@ fun PlayerOverlay(
                         }
 
                         OutlinedButton(
-                            onClick = { showDetailsDialog = true }
-                        ) {
-                            Icon(Icons.Default.Info, contentDescription = null, modifier = Modifier.size(18.dp), tint = TextPrimary)
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text("Detalhes", color = TextPrimary)
-                        }
-
-                        if (detailsText.contains("magnet:?", ignoreCase = true)) {
-                            val magnetUrl = detailsText.lines().find { it.contains("magnet:?", ignoreCase = true) }
-                                ?.substringAfter("streamUrl: ")
-                                ?: detailsText.substringAfter("magnet:?").let { "magnet:?$it" }
-
-                            Button(
-                                onClick = {
-                                    com.example.cinelocal.data.torrent.TorrentLaunchHelper.openInExternalTorrentApp(context, magnetUrl)
-                                },
-                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0284C7))
-                            ) {
-                                Text("Abrir no App Torrent", color = Color.White)
-                            }
-                        }
-
-                        OutlinedButton(
                             onClick = {
                                 clipboardManager.setText(AnnotatedString(detailsText))
-                                Toast.makeText(context, "Detalhes copiados!", Toast.LENGTH_SHORT).show()
+                                Toast.makeText(context, "Link/Detalhes copiados!", Toast.LENGTH_SHORT).show()
                             }
                         ) {
                             Icon(Icons.Default.ContentCopy, contentDescription = null, modifier = Modifier.size(18.dp), tint = TextPrimary)
@@ -281,6 +277,7 @@ fun PlayerOverlay(
                 }
             }
         }
+
 
 
         if (showDetailsDialog) {
@@ -389,7 +386,18 @@ fun PlayerOverlay(
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis
                             )
-                            if (uiState.subtitle.isNotBlank()) {
+                            val p2pState by com.example.cinelocal.data.torrent.NativeP2PTorrentEngine.status.collectAsStateWithLifecycle()
+                            if (p2pState.isStreaming) {
+                                val speedMb = String.format("%.1f MB/s", p2pState.downloadSpeedBps / (1024.0 * 1024.0))
+                                Text(
+                                    text = "⚡ P2P: ${p2pState.peersCount} Peers • $speedMb • Buffer ${p2pState.bufferedPercent}%",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = Color(0xFF38BDF8),
+                                    fontWeight = FontWeight.Bold,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            } else if (uiState.subtitle.isNotBlank()) {
                                 Text(
                                     text = uiState.subtitle,
                                     style = MaterialTheme.typography.bodySmall,
@@ -400,6 +408,7 @@ fun PlayerOverlay(
                             }
                         }
                     }
+
 
                     // Top Action Icons
                     Row(verticalAlignment = Alignment.CenterVertically) {
