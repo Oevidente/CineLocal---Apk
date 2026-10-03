@@ -361,11 +361,17 @@ class CastManager private constructor(private val context: Context) {
         }
 
         if (resolved.isLocal) {
-            CastServerService.start(
-                context,
-                _castState.value.deviceName ?: "Chromecast",
-                "$mediaTitle - ${episode.title}"
-            )
+            try {
+                CastServerService.start(
+                    context,
+                    _castState.value.deviceName ?: "Chromecast",
+                    "$mediaTitle - ${episode.title}"
+                )
+            } catch (e: Exception) {
+                Log.e("CastManager", "Erro ao iniciar serviço de notificação do Cast", e)
+                onResult?.invoke(false, "Ative as notificações para transmitir arquivos do celular")
+                return
+            }
         }
 
         val metadata = MediaMetadata(MediaMetadata.MEDIA_TYPE_MOVIE).apply {

@@ -705,7 +705,6 @@ fun CineLocalApp(
                 castState = castState,
                 onSelectDevice = { routeId ->
                     playerViewModel.castManager.selectDevice(routeId)
-                    playerViewModel.triggerCastForCurrentMedia()
                 },
                 onRefreshDiscovery = {
                     playerViewModel.castManager.startDiscovery()

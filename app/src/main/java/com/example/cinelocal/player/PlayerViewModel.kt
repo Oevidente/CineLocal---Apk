@@ -95,6 +95,9 @@ class PlayerViewModel(
     private var currentVttFile: File? = null
     private var currentVttContent: String? = null
 
+    private var localPositionBeforeCast: Long = 0L
+    private var lastRemotePositionMs: Long = 0L
+
     init {
         castManager.init()
         viewModelScope.launch {
@@ -102,13 +105,29 @@ class PlayerViewModel(
             _openSubtitlesApiKey.value = key
         }
         viewModelScope.launch {
+            var wasConnected = false
             castState.collect { cState ->
                 _uiState.value = _uiState.value.copy(
                     isCasting = cState.isConnected,
                     castDeviceName = cState.deviceName
                 )
+                if (cState.isConnected && !wasConnected) onCastSessionStarted()
+                if (!cState.isConnected && wasConnected) onCastSessionEnded()
+                wasConnected = cState.isConnected
             }
         }
+    }
+
+    private fun onCastSessionStarted() {
+        if (currentEpisode == null && currentChannel == null) return
+        localPositionBeforeCast = exoPlayer?.currentPosition ?: 0L
+        triggerCastForCurrentMedia()
+    }
+
+    private fun onCastSessionEnded() {
+        val pos = if (lastRemotePositionMs > 0) lastRemotePositionMs else localPositionBeforeCast
+        exoPlayer?.seekTo(pos)
+        exoPlayer?.play()
     }
 
     private fun createPlayer(): ExoPlayer {
@@ -247,13 +266,15 @@ class PlayerViewModel(
                     val resolved = resolveResult.source
                     currentSourceUri = resolved.uri
 
-                    if (castState.value.isConnected) {
-                        player.pause()
+                    if (castManager.hasActiveSession()) {
                         castManager.castEpisode(
                             episode = episode,
                             mediaTitle = mediaTitle,
                             startPositionMs = resumePos
-                        )
+                        ) { ok, error ->
+                            if (ok) player.pause()
+                            else _uiState.value = _uiState.value.copy(errorMessage = error ?: "Falha ao transmitir")
+                        }
                     } else {
                         val mediaItem = MediaItem.Builder()
                             .setUri(resolved.uri)
@@ -346,9 +367,13 @@ class PlayerViewModel(
                 val resolved = resolveResult.source
                 currentSourceUri = resolved.uri
 
-                if (castState.value.isConnected) {
-                    player.pause()
-                    currentChannel?.let { castManager.castIptvChannel(it) }
+                if (castManager.hasActiveSession()) {
+                    currentChannel?.let { ch ->
+                        castManager.castIptvChannel(ch) { ok, error ->
+                            if (ok) player.pause()
+                            else _uiState.value = _uiState.value.copy(errorMessage = error ?: "Falha ao transmitir")
+                        }
+                    }
                 } else {
                     val mediaItem = MediaItem.Builder()
                         .setUri(resolved.uri)
@@ -407,19 +432,24 @@ class PlayerViewModel(
     }
 
     fun triggerCastForCurrentMedia() {
-        if (!castState.value.isConnected) return
+        if (!castManager.hasActiveSession()) return
+        val pos = exoPlayer?.currentPosition?.takeIf { it > 0 } ?: localPositionBeforeCast
 
-        if (currentEpisode != null) {
-            val pos = if (exoPlayer != null && exoPlayer!!.currentPosition > 0) exoPlayer!!.currentPosition else 0
-            player.pause()
+        val episode = currentEpisode
+        if (episode != null) {
             castManager.castEpisode(
-                episode = currentEpisode!!,
+                episode = episode,
                 mediaTitle = currentMediaTitle,
                 startPositionMs = pos
-            )
-        } else if (currentChannel != null) {
-            player.pause()
-            castManager.castIptvChannel(currentChannel!!)
+            ) { ok, error ->
+                if (ok) exoPlayer?.pause()
+                else _uiState.value = _uiState.value.copy(errorMessage = error ?: "Falha ao transmitir")
+            }
+        } else currentChannel?.let { ch ->
+            castManager.castIptvChannel(ch) { ok, error ->
+                if (ok) exoPlayer?.pause()
+                else _uiState.value = _uiState.value.copy(errorMessage = error ?: "Falha ao transmitir")
+            }
         }
     }
 
@@ -429,6 +459,9 @@ class PlayerViewModel(
             while (isActive) {
                 if (castState.value.isConnected) {
                     val cState = castState.value
+                    if (cState.currentPosition > 0) {
+                        lastRemotePositionMs = cState.currentPosition
+                    }
                     _uiState.value = _uiState.value.copy(
                         currentPosition = cState.currentPosition,
                         duration = cState.duration,

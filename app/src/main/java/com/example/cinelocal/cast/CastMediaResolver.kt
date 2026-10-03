@@ -56,7 +56,7 @@ object CastMediaResolver {
         // Local URI (content:// ou file://) -> registrar no MediaProxyServer
         val detectedMime = detectMimeType(context, uri)
         val castMime = when {
-            detectedMime.contains("matroska", ignoreCase = true) -> "video/mp4"
+            detectedMime.contains("matroska", ignoreCase = true) -> "video/x-matroska"
             detectedMime.contains("webm", ignoreCase = true) -> "video/webm"
             detectedMime.isBlank() || detectedMime == "application/octet-stream" -> "video/mp4"
             else -> detectedMime
