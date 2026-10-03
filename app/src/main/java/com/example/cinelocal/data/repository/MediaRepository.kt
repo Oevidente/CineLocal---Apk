@@ -296,6 +296,7 @@ class MediaRepository(
             else -> "Torrent ($infoHash)"
         }
         val mediaId = UUID.randomUUID().toString()
+        val detectedSeries = isSeries || com.example.cinelocal.data.torrent.TorrentLaunchHelper.isSeasonPack(title, magnetUri)
         val kind = MediaKind.TORRENT
 
         val mediaItem = MediaItemEntity(
@@ -309,15 +310,21 @@ class MediaRepository(
         )
         mediaDao.insertMedia(mediaItem)
 
-        val episode = EpisodeEntity(
-            mediaId = mediaId,
-            seasonNumber = if (isSeries) 1 else 0,
-            episodeNumber = 1,
-            title = if (isSeries) "Episódio 1 - $title" else title,
-            streamUrl = magnetUri
-        )
-        episodeDao.insertEpisode(episode)
+        if (detectedSeries) {
+            val episodes = com.example.cinelocal.data.torrent.TorrentLaunchHelper.generateSeasonEpisodes(mediaId, title, magnetUri, 8)
+            episodes.forEach { episodeDao.insertEpisode(it) }
+        } else {
+            val episode = EpisodeEntity(
+                mediaId = mediaId,
+                seasonNumber = 0,
+                episodeNumber = 1,
+                title = title,
+                streamUrl = magnetUri
+            )
+            episodeDao.insertEpisode(episode)
+        }
     }
+
 
     suspend fun importIptvFromUrl(url: String, clearExisting: Boolean = false): Int = withContext(Dispatchers.IO) {
         if (clearExisting) {

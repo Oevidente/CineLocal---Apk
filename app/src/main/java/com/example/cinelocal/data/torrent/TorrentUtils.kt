@@ -9,10 +9,17 @@ object TorrentUtils {
         val originalUri: String,
         val infoHash: String,
         val displayName: String,
+        val exactLength: Long? = null,
         val trackers: List<String> = emptyList()
     ) {
         val name: String get() = displayName
         val streamUrl: String get() = getStreamableUrl(originalUri, infoHash)
+    }
+
+    fun extractExactLength(magnetUri: String): Long? {
+        val regex = Regex("xl=([0-9]+)", RegexOption.IGNORE_CASE)
+        val match = regex.find(magnetUri) ?: return null
+        return match.groupValues.getOrNull(1)?.toLongOrNull()
     }
 
     fun extractInfoHash(magnetUri: String): String? {
@@ -37,6 +44,7 @@ object TorrentUtils {
     fun parseMagnetUri(magnetUri: String): ParsedMagnet? {
         val hash = extractInfoHash(magnetUri) ?: return null
         val dn = extractDisplayName(magnetUri) ?: "Torrent ($hash)"
+        val length = extractExactLength(magnetUri)
         
         val trackerRegex = Regex("tr=([^&]+)", RegexOption.IGNORE_CASE)
         val trackers = trackerRegex.findAll(magnetUri).mapNotNull {
@@ -51,9 +59,11 @@ object TorrentUtils {
             originalUri = magnetUri,
             infoHash = hash,
             displayName = dn,
+            exactLength = length,
             trackers = trackers
         )
     }
+
 
     fun parseMagnet(magnetUri: String): ParsedMagnet {
         return parseMagnetUri(magnetUri) ?: ParsedMagnet(

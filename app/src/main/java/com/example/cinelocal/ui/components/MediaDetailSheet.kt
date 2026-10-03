@@ -20,6 +20,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.PlayArrow
@@ -270,6 +271,27 @@ fun MediaDetailSheet(
                             Icon(imageVector = Icons.Default.Delete, contentDescription = null)
                             Spacer(modifier = Modifier.width(6.dp))
                             Text(text = "Remover", color = Color(0xFFFF5252))
+                        }
+                    }
+
+                    if (media.kind == MediaKind.TORRENT || media.streamUrl?.startsWith("magnet:", ignoreCase = true) == true) {
+                        Spacer(modifier = Modifier.height(10.dp))
+                        OutlinedButton(
+                            onClick = {
+                                val magnet = media.streamUrl ?: ""
+                                com.example.cinelocal.data.torrent.TorrentLaunchHelper.openInExternalTorrentApp(context, magnet)
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(8.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Download,
+                                contentDescription = null,
+                                tint = Color(0xFF38BDF8),
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("Abrir no LibreTorrent / Flud (Download Completo)", color = TextPrimary)
                         }
                     }
 

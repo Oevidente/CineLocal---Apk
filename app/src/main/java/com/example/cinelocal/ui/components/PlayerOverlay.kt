@@ -248,6 +248,21 @@ fun PlayerOverlay(
                             Text("Detalhes", color = TextPrimary)
                         }
 
+                        if (detailsText.contains("magnet:?", ignoreCase = true)) {
+                            val magnetUrl = detailsText.lines().find { it.contains("magnet:?", ignoreCase = true) }
+                                ?.substringAfter("streamUrl: ")
+                                ?: detailsText.substringAfter("magnet:?").let { "magnet:?$it" }
+
+                            Button(
+                                onClick = {
+                                    com.example.cinelocal.data.torrent.TorrentLaunchHelper.openInExternalTorrentApp(context, magnetUrl)
+                                },
+                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0284C7))
+                            ) {
+                                Text("Abrir no App Torrent", color = Color.White)
+                            }
+                        }
+
                         OutlinedButton(
                             onClick = {
                                 clipboardManager.setText(AnnotatedString(detailsText))
@@ -266,6 +281,7 @@ fun PlayerOverlay(
                 }
             }
         }
+
 
         if (showDetailsDialog) {
             val context = LocalContext.current

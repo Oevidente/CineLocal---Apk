@@ -77,12 +77,23 @@ object PlaybackSourceResolver {
             )
         }
 
-        if (hasMagnetCandidate) {
-            return ResolveResult.Fail("O motor de torrent ainda não está ativo.")
+        val magnetUri = candidateStrings.firstOrNull { it.startsWith("magnet:", ignoreCase = true) }
+            ?: if (hasMagnetCandidate) (media?.streamUrl ?: ep?.streamUrl) else null
+
+        if (magnetUri != null && magnetUri.startsWith("magnet:", ignoreCase = true)) {
+            val streamUrl = com.example.cinelocal.data.torrent.TorrentStreamEngine.getStreamUrl(magnetUri)
+            return ResolveResult.Ok(
+                ResolvedSource(
+                    uri = Uri.parse(streamUrl),
+                    mimeType = androidx.media3.common.MimeTypes.VIDEO_MP4,
+                    isLive = false
+                )
+            )
         }
 
         return ResolveResult.Fail("Este item não tem fonte de vídeo.")
     }
+
 
     /**
      * Resolve uma transmissão ao vivo (IPTV/HLS).

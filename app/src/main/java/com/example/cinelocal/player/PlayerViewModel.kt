@@ -303,20 +303,22 @@ class PlayerViewModel(
 
         val parsed = TorrentUtils.parseMagnet(magnetUri)
         val displayTitle = if (title.isNotBlank()) title else parsed.name
-
-        _uiState.value = PlayerUiState(
+        val ep = EpisodeEntity(
+            id = "torrent_temp",
+            mediaId = "torrent_temp_media",
+            seasonNumber = 0,
+            episodeNumber = 1,
             title = displayTitle,
-            subtitle = "Torrent P2P • ${parsed.infoHash.take(8)}",
-            isLive = false,
-            isTorrent = true,
-            isBuffering = false,
-            errorMessage = "O motor de torrent ainda não está ativo.",
-            errorDetails = "Motor de torrent desativado.\nMagnet: ${parsed.displayName} (${parsed.infoHash})\nURI: $magnetUri",
-            canRetry = false,
-            isCasting = castState.value.isConnected,
-            castDeviceName = castState.value.deviceName
+            streamUrl = magnetUri
+        )
+
+        playMediaEpisode(
+            episode = ep,
+            mediaTitle = displayTitle,
+            allEpisodes = listOf(ep)
         )
     }
+
 
     fun playLiveStream(title: String, group: String, streamUrl: String) {
         currentEpisode = null

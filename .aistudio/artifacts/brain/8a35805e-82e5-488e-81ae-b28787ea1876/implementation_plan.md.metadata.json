@@ -1,6 +1,6 @@
 {
-  "summary":  "Plano arquitetural e de implementação para conexão com PC via rede local (SMB), descoberta automática na Wi-Fi, navegador de pastas remotas, streaming HTTP proxy e catalogação na biblioteca do CineLocal.",
-  "updatedAt":  "2026-10-03T16:33:30.243418022Z",
+  "summary":  "Plano para ativação e suporte completo a Torrent Magnet no CineLocal, com streaming interno sequencial, seletor de episódios/arquivos de séries e opção de abrir no Flud/LibreTorrent.",
+  "updatedAt":  "2026-10-03T17:15:26.611447890Z",
   "requestFeedback":  true,
   "userFacing":  true
 }
