@@ -56,6 +56,7 @@ import com.example.cinelocal.ui.theme.TextSecondary
 fun SettingsScreen(
     tmdbApiKey: String,
     openSubtitlesApiKey: String = "",
+    openSubtitlesUsername: String = "",
     totalMediaCount: Int,
     totalChannelCount: Int,
     onOpenTmdbConfig: () -> Unit,
@@ -96,12 +97,18 @@ fun SettingsScreen(
         }
 
         item {
+            val isConfigured = openSubtitlesApiKey.isNotBlank()
+            val subText = when {
+                isConfigured && openSubtitlesUsername.isNotBlank() -> "Configurado ($openSubtitlesUsername)"
+                isConfigured -> "Chave configurada (sem conta vinculada)"
+                else -> "Chave/Conta não configuradas"
+            }
             SettingsItemCard(
                 icon = Icons.Default.Subtitles,
                 title = "OpenSubtitles.com v1",
-                subtitle = if (openSubtitlesApiKey.isNotBlank()) "Configurado (Busca e download ativos)" else "Chave não configurada (Busca online desativada)",
-                badge = if (openSubtitlesApiKey.isNotBlank()) "ATIVO" else null,
-                badgeColor = if (openSubtitlesApiKey.isNotBlank()) Color(0xFF4CAF50) else null,
+                subtitle = subText,
+                badge = if (isConfigured) "ATIVO" else null,
+                badgeColor = if (isConfigured) Color(0xFF4CAF50) else null,
                 onClick = onOpenOpenSubtitlesConfig,
                 testTag = "settings_opensubtitles_item"
             )

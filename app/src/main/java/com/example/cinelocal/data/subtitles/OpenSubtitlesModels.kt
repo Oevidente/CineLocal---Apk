@@ -2,6 +2,31 @@ package com.example.cinelocal.data.subtitles
 
 import com.google.gson.annotations.SerializedName
 
+sealed class OsResult<out T> {
+    data class Success<out T>(val data: T) : OsResult<T>()
+    data class Error(val code: Int? = null, val message: String) : OsResult<Nothing>()
+}
+
+data class OpenSubtitlesLoginRequest(
+    @SerializedName("username") val username: String,
+    @SerializedName("password") val password: String
+)
+
+data class OpenSubtitlesLoginResponse(
+    @SerializedName("token") val token: String? = null,
+    @SerializedName("base_url") val baseUrl: String? = null,
+    @SerializedName("status") val status: Int = 0,
+    @SerializedName("message") val message: String? = null,
+    @SerializedName("user") val user: OpenSubtitlesUser? = null
+)
+
+data class OpenSubtitlesUser(
+    @SerializedName("allowed_downloads") val allowedDownloads: Int = 0,
+    @SerializedName("level") val level: String? = null,
+    @SerializedName("user_id") val userId: Long = 0,
+    @SerializedName("vip") val vip: Boolean = false
+)
+
 data class OpenSubtitlesSearchResponse(
     @SerializedName("total_pages") val totalPages: Int = 0,
     @SerializedName("total_count") val totalCount: Int = 0,
@@ -26,7 +51,8 @@ data class SubtitleAttributes(
     @SerializedName("comments") val comments: String? = null,
     @SerializedName("hearing_impaired") val hearingImpaired: Boolean = false,
     @SerializedName("files") val files: List<SubtitleFile> = emptyList(),
-    @SerializedName("feature_details") val featureDetails: FeatureDetails? = null
+    @SerializedName("feature_details") val featureDetails: FeatureDetails? = null,
+    @SerializedName("moviehash_match") val moviehashMatch: Boolean = false
 )
 
 data class SubtitleFile(
@@ -46,7 +72,7 @@ data class SubtitleDownloadRequest(
 )
 
 data class SubtitleDownloadResponse(
-    @SerializedName("link") val link: String,
+    @SerializedName("link") val link: String? = null,
     @SerializedName("file_name") val fileName: String? = null,
     @SerializedName("requests") val requests: Int? = null,
     @SerializedName("remaining") val remaining: Int? = null,
@@ -62,5 +88,6 @@ data class SubtitleItem(
     val releaseName: String,
     val downloadCount: Int,
     val rating: Float,
-    val hearingImpaired: Boolean
+    val hearingImpaired: Boolean,
+    val isHashMatch: Boolean = false
 )

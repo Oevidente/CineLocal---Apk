@@ -86,6 +86,15 @@ class PlayerViewModel(
     private val _openSubtitlesApiKey = MutableStateFlow("")
     val openSubtitlesApiKey: StateFlow<String> = _openSubtitlesApiKey.asStateFlow()
 
+    private val _openSubtitlesUsername = MutableStateFlow("")
+    val openSubtitlesUsername: StateFlow<String> = _openSubtitlesUsername.asStateFlow()
+
+    private val _openSubtitlesPassword = MutableStateFlow("")
+    val openSubtitlesPassword: StateFlow<String> = _openSubtitlesPassword.asStateFlow()
+
+    private val _downloadedSubtitles = MutableStateFlow<List<com.example.cinelocal.data.model.SubtitleFileEntity>>(emptyList())
+    val downloadedSubtitles: StateFlow<List<com.example.cinelocal.data.model.SubtitleFileEntity>> = _downloadedSubtitles.asStateFlow()
+
     private var progressTrackingJob: Job? = null
     private var currentEpisode: EpisodeEntity? = null
     private var currentChannel: IptvChannelEntity? = null
@@ -101,8 +110,9 @@ class PlayerViewModel(
     init {
         castManager.init()
         viewModelScope.launch {
-            val key = repository.getSetting("opensubtitles_api_key").firstOrNull() ?: ""
-            _openSubtitlesApiKey.value = key
+            _openSubtitlesApiKey.value = repository.getSetting("opensubtitles_api_key").firstOrNull() ?: ""
+            _openSubtitlesUsername.value = repository.getSetting("opensubtitles_username").firstOrNull() ?: ""
+            _openSubtitlesPassword.value = repository.getSetting("opensubtitles_password").firstOrNull() ?: ""
         }
         viewModelScope.launch {
             var wasConnected = false
@@ -255,6 +265,9 @@ class PlayerViewModel(
 
         viewModelScope.launch {
             val media = repository.getMediaById(episode.mediaId)
+            val downloadedSubs = repository.getSubtitlesListForEpisode(episode.id)
+            _downloadedSubtitles.value = downloadedSubs
+
             val resolveResult = PlaybackSourceResolver.resolve(
                 context = getApplication(),
                 ep = episode,
@@ -266,27 +279,59 @@ class PlayerViewModel(
                     val resolved = resolveResult.source
                     currentSourceUri = resolved.uri
 
+                    val autoSub = downloadedSubs.firstOrNull()
+
                     if (castManager.hasActiveSession()) {
+                        val subUrl = autoSub?.let { sub ->
+                            try {
+                                val file = File(sub.filePath)
+                                if (file.exists()) {
+                                    val content = file.readText()
+                                    castManager.proxyServer.registerSubtitle(content)
+                                } else null
+                            } catch (_: Exception) { null }
+                        }
+
                         castManager.castEpisode(
                             episode = episode,
                             mediaTitle = mediaTitle,
-                            startPositionMs = resumePos
+                            startPositionMs = resumePos,
+                            subtitleVttUrl = subUrl
                         ) { ok, error ->
                             if (ok) player.pause()
                             else _uiState.value = _uiState.value.copy(errorMessage = error ?: "Falha ao transmitir")
                         }
                     } else {
-                        val mediaItem = MediaItem.Builder()
+                        val mediaItemBuilder = MediaItem.Builder()
                             .setUri(resolved.uri)
                             .apply {
                                 if (!resolved.mimeType.isNullOrBlank()) {
                                     setMimeType(resolved.mimeType)
                                 }
                             }
-                            .build()
+
+                        if (autoSub != null && File(autoSub.filePath).exists()) {
+                            val subConfig = MediaItem.SubtitleConfiguration.Builder(Uri.fromFile(File(autoSub.filePath)))
+                                .setMimeType(MimeTypes.TEXT_VTT)
+                                .setLanguage(autoSub.language)
+                                .setLabel(autoSub.label)
+                                .setSelectionFlags(C.SELECTION_FLAG_DEFAULT)
+                                .build()
+                            mediaItemBuilder.setSubtitleConfigurations(listOf(subConfig))
+
+                            player.trackSelectionParameters = player.trackSelectionParameters.buildUpon()
+                                .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, false)
+                                .setPreferredTextLanguage(autoSub.language)
+                                .build()
+
+                            _uiState.value = _uiState.value.copy(
+                                activeExternalSubtitleLabel = autoSub.label,
+                                selectedSubtitleIndex = -2
+                            )
+                        }
 
                         player.stop()
-                        player.setMediaItem(mediaItem)
+                        player.setMediaItem(mediaItemBuilder.build())
                         if (resumePos > 0) {
                             player.seekTo(resumePos)
                         }
@@ -696,17 +741,25 @@ class PlayerViewModel(
         )
     }
 
-    fun applyExternalSubtitle(file: File, vttContent: String, label: String) {
+    fun applySubtitleEntity(sub: com.example.cinelocal.data.model.SubtitleFileEntity) {
+        val file = File(sub.filePath)
+        if (!file.exists()) {
+            android.util.Log.e("PlayerViewModel", "Arquivo de legenda não encontrado: ${sub.filePath}")
+            return
+        }
+
         currentVttFile = file
+        val vttContent = try { file.readText() } catch (_: Exception) { "" }
         currentVttContent = vttContent
+
         _uiState.value = _uiState.value.copy(
-            activeExternalSubtitleLabel = label,
+            activeExternalSubtitleLabel = sub.label,
             selectedSubtitleIndex = -2
         )
 
         // Se estiver no Cast, registrar no proxy e recarregar mídia com a legenda WebVTT
         if (castState.value.isConnected && currentEpisode != null) {
-            val subUrl = castManager.proxyServer.registerSubtitle(vttContent)
+            val subUrl = if (vttContent.isNotBlank()) castManager.proxyServer.registerSubtitle(vttContent) else null
             val pos = _uiState.value.currentPosition
             castManager.castEpisode(
                 episode = currentEpisode!!,
@@ -717,30 +770,104 @@ class PlayerViewModel(
             return
         }
 
-        // Se estiver no ExoPlayer nativo, injetar a faixa de legenda WebVTT
-        val sourceUri = currentSourceUri ?: return
-        val currentPos = exoPlayer?.currentPosition ?: 0L
-        val isPlaying = exoPlayer?.isPlaying ?: true
+        val p = exoPlayer ?: return
+        val currentMediaItem = p.currentMediaItem ?: return
+        val currentPos = p.currentPosition
+        val isPlaying = p.isPlaying
 
         val subtitleConfig = MediaItem.SubtitleConfiguration.Builder(Uri.fromFile(file))
             .setMimeType(MimeTypes.TEXT_VTT)
-            .setLanguage("pt-BR")
-            .setLabel(label)
+            .setLanguage(sub.language.ifBlank { "pt-BR" })
+            .setLabel(sub.label)
             .setSelectionFlags(C.SELECTION_FLAG_DEFAULT)
             .build()
 
-        val newMediaItem = MediaItem.Builder()
-            .setUri(sourceUri)
+        val newMediaItem = currentMediaItem.buildUpon()
             .setSubtitleConfigurations(listOf(subtitleConfig))
             .build()
 
-        player.setMediaItem(newMediaItem, currentPos)
-        player.prepare()
-        if (isPlaying) player.play()
+        p.trackSelectionParameters = p.trackSelectionParameters.buildUpon()
+            .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, false)
+            .setPreferredTextLanguage(sub.language.ifBlank { "pt-BR" })
+            .build()
+
+        p.setMediaItem(newMediaItem, currentPos)
+        p.prepare()
+        if (isPlaying) p.play()
     }
 
-    fun updateOpenSubtitlesApiKey(key: String) {
+    fun applyExternalSubtitle(file: File, vttContent: String, label: String) {
+        val epId = currentEpisode?.id ?: "temp"
+        val subEntity = com.example.cinelocal.data.model.SubtitleFileEntity(
+            episodeId = epId,
+            language = "pt-BR",
+            label = label,
+            filePath = file.absolutePath,
+            source = "manual"
+        )
+        viewModelScope.launch {
+            if (currentEpisode != null) {
+                repository.saveSubtitleFile(subEntity)
+                _downloadedSubtitles.value = repository.getSubtitlesListForEpisode(epId)
+            }
+            applySubtitleEntity(subEntity)
+        }
+    }
+
+    fun downloadAndApplySubtitle(
+        fileId: Long,
+        fileName: String,
+        language: String,
+        releaseName: String,
+        onResult: (com.example.cinelocal.data.subtitles.OsResult<com.example.cinelocal.data.model.SubtitleFileEntity>) -> Unit
+    ) {
+        val ep = currentEpisode
+        if (ep == null) {
+            onResult(com.example.cinelocal.data.subtitles.OsResult.Error(null, "Nenhum vídeo em execução."))
+            return
+        }
+
+        val client = com.example.cinelocal.data.subtitles.OpenSubtitlesClient(getApplication())
+        val apiKey = _openSubtitlesApiKey.value
+        val username = _openSubtitlesUsername.value
+        val password = _openSubtitlesPassword.value
+
+        viewModelScope.launch {
+            val result = client.downloadAndConvertSubtitle(
+                apiKey = apiKey,
+                username = username,
+                password = password,
+                fileId = fileId,
+                fileName = fileName,
+                episodeId = ep.id,
+                language = language,
+                releaseName = releaseName
+            )
+
+            when (result) {
+                is com.example.cinelocal.data.subtitles.OsResult.Success -> {
+                    val subEntity = result.data
+                    repository.saveSubtitleFile(subEntity)
+                    _downloadedSubtitles.value = repository.getSubtitlesListForEpisode(ep.id)
+                    applySubtitleEntity(subEntity)
+                    onResult(com.example.cinelocal.data.subtitles.OsResult.Success(subEntity))
+                }
+                is com.example.cinelocal.data.subtitles.OsResult.Error -> {
+                    onResult(result)
+                }
+            }
+        }
+    }
+
+    fun updateOpenSubtitlesCredentials(key: String, user: String, pass: String) {
         _openSubtitlesApiKey.value = key
+        _openSubtitlesUsername.value = user
+        _openSubtitlesPassword.value = pass
+        viewModelScope.launch {
+            repository.setSetting("opensubtitles_api_key", key)
+            repository.setSetting("opensubtitles_username", user)
+            repository.setSetting("opensubtitles_password", pass)
+        }
     }
 
     fun releasePlayer() {

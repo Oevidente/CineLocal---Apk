@@ -39,6 +39,9 @@ fun PlayerScreen(
     val uiState by playerViewModel.uiState.collectAsStateWithLifecycle()
     val castState by playerViewModel.castState.collectAsStateWithLifecycle()
     val openSubtitlesApiKey by playerViewModel.openSubtitlesApiKey.collectAsStateWithLifecycle()
+    val openSubtitlesUsername by playerViewModel.openSubtitlesUsername.collectAsStateWithLifecycle()
+    val openSubtitlesPassword by playerViewModel.openSubtitlesPassword.collectAsStateWithLifecycle()
+    val downloadedSubtitles by playerViewModel.downloadedSubtitles.collectAsStateWithLifecycle()
 
     var showCastDialog by remember { mutableStateOf(false) }
 
@@ -111,6 +114,9 @@ fun PlayerScreen(
             uiState = uiState,
             castState = castState,
             openSubtitlesApiKey = openSubtitlesApiKey,
+            openSubtitlesUsername = openSubtitlesUsername,
+            openSubtitlesPassword = openSubtitlesPassword,
+            downloadedSubtitles = downloadedSubtitles,
             onBackClick = onBackClick,
             onPlayPauseClick = { playerViewModel.togglePlayPause() },
             onSeekBack = { playerViewModel.seekBack() },
@@ -120,6 +126,10 @@ fun PlayerScreen(
             onResizeModeCycle = { playerViewModel.cycleResizeMode() },
             onSelectAudioTrack = { idx -> playerViewModel.selectAudioTrack(idx) },
             onSelectSubtitleTrack = { idx -> playerViewModel.selectSubtitleTrack(idx) },
+            onSelectDownloadedSubtitle = { sub -> playerViewModel.applySubtitleEntity(sub) },
+            onDownloadAndApplySubtitle = { fId, fName, lang, relName, onRes ->
+                playerViewModel.downloadAndApplySubtitle(fId, fName, lang, relName, onRes)
+            },
             onApplyExternalSubtitle = { file, content, label ->
                 playerViewModel.applyExternalSubtitle(file, content, label)
             },

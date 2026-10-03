@@ -1,9 +1,8 @@
 package com.example.cinelocal.ui.components
 
-import androidx.compose.foundation.background
+import android.net.Uri
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -19,8 +18,11 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.CloudDownload
+import androidx.compose.material.icons.filled.Error
 import androidx.compose.material.icons.filled.HearingDisabled
 import androidx.compose.material.icons.filled.Key
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.Subtitles
@@ -55,13 +57,14 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.cinelocal.data.model.SubtitleFileEntity
 import com.example.cinelocal.data.model.TrackInfo
 import com.example.cinelocal.data.subtitles.OpenSubtitlesClient
+import com.example.cinelocal.data.subtitles.OsResult
 import com.example.cinelocal.data.subtitles.SubtitleItem
 import com.example.cinelocal.ui.theme.AccentGold
 import com.example.cinelocal.ui.theme.CineRed
@@ -71,17 +74,28 @@ import com.example.cinelocal.ui.theme.DarkSurfaceVariant
 import com.example.cinelocal.ui.theme.TextPrimary
 import com.example.cinelocal.ui.theme.TextSecondary
 import kotlinx.coroutines.launch
-import java.io.File
 
 @Composable
 fun SubtitleSelectionDialog(
     mediaTitle: String,
     openSubtitlesApiKey: String,
+    openSubtitlesUsername: String = "",
+    openSubtitlesPassword: String = "",
+    episodeId: String? = null,
+    videoUri: Uri? = null,
+    downloadedSubtitles: List<SubtitleFileEntity> = emptyList(),
     availableSubtitleTracks: List<TrackInfo>,
     selectedSubtitleIndex: Int,
     activeExternalSubtitleLabel: String? = null,
     onSelectEmbeddedTrack: (Int) -> Unit,
-    onApplyExternalSubtitle: (file: File, vttContent: String, label: String) -> Unit,
+    onSelectDownloadedSubtitle: (SubtitleFileEntity) -> Unit,
+    onDownloadAndApplySubtitle: (
+        fileId: Long,
+        fileName: String,
+        language: String,
+        releaseName: String,
+        onResult: (OsResult<SubtitleFileEntity>) -> Unit
+    ) -> Unit,
     onDisableSubtitles: () -> Unit,
     onOpenSettingsForApiKey: () -> Unit,
     onDismiss: () -> Unit
@@ -90,7 +104,7 @@ fun SubtitleSelectionDialog(
     val scope = rememberCoroutineScope()
     val client = remember { OpenSubtitlesClient(context) }
 
-    var selectedTab by remember { mutableIntStateOf(if (availableSubtitleTracks.isNotEmpty()) 0 else 1) }
+    var selectedTab by remember { mutableIntStateOf(0) }
     var searchQuery by remember {
         val clean = mediaTitle.replace(Regex("""(?i)\b(1080p|720p|2160p|4k|bluray|web-dl|x264|x265|hevc|dual|dublado)\b"""), "").trim()
         mutableStateOf(clean)
@@ -100,30 +114,36 @@ fun SubtitleSelectionDialog(
     var searchResults by remember { mutableStateOf<List<SubtitleItem>>(emptyList()) }
     var searchError by remember { mutableStateOf<String?>(null) }
     var downloadingFileId by remember { mutableStateOf<Long?>(null) }
+    var downloadError by remember { mutableStateOf<String?>(null) }
 
     fun doSearch() {
         if (openSubtitlesApiKey.isBlank()) {
             searchError = "Chave de API do OpenSubtitles não configurada."
             return
         }
-        if (searchQuery.isBlank()) return
 
         scope.launch {
             isSearching = true
             searchError = null
-            try {
-                val results = client.searchSubtitles(
-                    apiKey = openSubtitlesApiKey,
-                    query = searchQuery
-                )
-                searchResults = results
-                if (results.isEmpty()) {
-                    searchError = "Nenhuma legenda encontrada para '$searchQuery'."
+            downloadError = null
+            val result = client.searchSubtitles(
+                apiKey = openSubtitlesApiKey,
+                username = openSubtitlesUsername,
+                password = openSubtitlesPassword,
+                query = searchQuery,
+                videoUri = videoUri
+            )
+            isSearching = false
+            when (result) {
+                is OsResult.Success -> {
+                    searchResults = result.data
+                    if (result.data.isEmpty()) {
+                        searchError = "Nenhuma legenda encontrada para '$searchQuery'."
+                    }
                 }
-            } catch (e: Exception) {
-                searchError = "Erro na busca: ${e.localizedMessage}"
-            } finally {
-                isSearching = false
+                is OsResult.Error -> {
+                    searchError = result.message
+                }
             }
         }
     }
@@ -169,14 +189,17 @@ fun SubtitleSelectionDialog(
                     Tab(
                         selected = selectedTab == 0,
                         onClick = { selectedTab = 0 },
-                        text = { Text("Faixas do Vídeo (${availableSubtitleTracks.size})", fontSize = 11.sp, fontWeight = FontWeight.Bold) },
+                        text = {
+                            val totalLocal = downloadedSubtitles.size + availableSubtitleTracks.size
+                            Text("Legendas ($totalLocal)", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                        },
                         selectedContentColor = CineRed,
                         unselectedContentColor = TextSecondary
                     )
                     Tab(
                         selected = selectedTab == 1,
                         onClick = { selectedTab = 1 },
-                        text = { Text("OpenSubtitles", fontSize = 11.sp, fontWeight = FontWeight.Bold) },
+                        text = { Text("OpenSubtitles Online", fontSize = 11.sp, fontWeight = FontWeight.Bold) },
                         selectedContentColor = CineRed,
                         unselectedContentColor = TextSecondary
                     )
@@ -186,14 +209,14 @@ fun SubtitleSelectionDialog(
 
                 when (selectedTab) {
                     0 -> {
-                        // Embedded Tracks & Option to Turn Off
+                        // Local / Downloaded / Embedded Subtitles
                         LazyColumn(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .heightIn(max = 280.dp),
                             verticalArrangement = Arrangement.spacedBy(6.dp)
                         ) {
-                            // Desativar Legendas
+                            // Option: Turn Off Subtitles
                             item {
                                 Card(
                                     modifier = Modifier
@@ -231,12 +254,30 @@ fun SubtitleSelectionDialog(
                                 }
                             }
 
-                            // External Subtitle Active
-                            if (activeExternalSubtitleLabel != null) {
+                            // Downloaded / External Subtitles Section from DB
+                            if (downloadedSubtitles.isNotEmpty()) {
                                 item {
+                                    Text(
+                                        text = "Legendas Baixadas / Salvas (${downloadedSubtitles.size})",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = AccentGold,
+                                        fontWeight = FontWeight.Bold,
+                                        modifier = Modifier.padding(top = 8.dp, bottom = 4.dp)
+                                    )
+                                }
+
+                                items(downloadedSubtitles) { sub ->
+                                    val isSelected = activeExternalSubtitleLabel == sub.label
                                     Card(
-                                        modifier = Modifier.fillMaxWidth(),
-                                        colors = CardDefaults.cardColors(containerColor = CineRed.copy(alpha = 0.2f)),
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .clickable {
+                                                onSelectDownloadedSubtitle(sub)
+                                                onDismiss()
+                                            },
+                                        colors = CardDefaults.cardColors(
+                                            containerColor = if (isSelected) CineRed.copy(alpha = 0.2f) else DarkSurfaceVariant
+                                        ),
                                         shape = RoundedCornerShape(8.dp)
                                     ) {
                                         Row(
@@ -253,76 +294,99 @@ fun SubtitleSelectionDialog(
                                                 Icon(Icons.Default.CloudDownload, contentDescription = null, tint = AccentGold, modifier = Modifier.size(20.dp))
                                                 Spacer(modifier = Modifier.width(10.dp))
                                                 Column {
+                                                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                                        Surface(
+                                                            color = CineRed.copy(alpha = 0.2f),
+                                                            shape = RoundedCornerShape(4.dp)
+                                                        ) {
+                                                            Text(
+                                                                text = sub.language.uppercase(),
+                                                                color = CineRed,
+                                                                fontWeight = FontWeight.Bold,
+                                                                fontSize = 9.sp,
+                                                                modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp)
+                                                            )
+                                                        }
+                                                        Text(
+                                                            text = sub.label,
+                                                            style = MaterialTheme.typography.bodyMedium,
+                                                            color = TextPrimary,
+                                                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                                                            maxLines = 1,
+                                                            overflow = TextOverflow.Ellipsis
+                                                        )
+                                                    }
+                                                }
+                                            }
+                                            if (isSelected) {
+                                                Icon(Icons.Default.Check, contentDescription = "Selecionada", tint = CineRed, modifier = Modifier.size(18.dp))
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+
+                            // Embedded Tracks Section
+                            if (availableSubtitleTracks.isNotEmpty()) {
+                                item {
+                                    Text(
+                                        text = "Faixas do Arquivo de Vídeo (${availableSubtitleTracks.size})",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = TextSecondary,
+                                        fontWeight = FontWeight.Bold,
+                                        modifier = Modifier.padding(top = 8.dp, bottom = 4.dp)
+                                    )
+                                }
+
+                                items(availableSubtitleTracks) { track ->
+                                    val isSelected = selectedSubtitleIndex == track.index && activeExternalSubtitleLabel == null
+                                    Card(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .clickable {
+                                                onSelectEmbeddedTrack(track.index)
+                                                onDismiss()
+                                            },
+                                        colors = CardDefaults.cardColors(
+                                            containerColor = if (isSelected) CineRed.copy(alpha = 0.2f) else DarkSurfaceVariant
+                                        ),
+                                        shape = RoundedCornerShape(8.dp)
+                                    ) {
+                                        Row(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .padding(12.dp),
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.SpaceBetween
+                                        ) {
+                                            Column(modifier = Modifier.weight(1f)) {
+                                                Text(
+                                                    text = track.label,
+                                                    style = MaterialTheme.typography.bodyMedium,
+                                                    color = TextPrimary,
+                                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
+                                                )
+                                                if (!track.language.isNullOrBlank()) {
                                                     Text(
-                                                        text = "Legenda Baixada (Ativa)",
+                                                        text = "Idioma: ${track.language}",
                                                         style = MaterialTheme.typography.bodySmall,
-                                                        color = AccentGold,
-                                                        fontWeight = FontWeight.Bold
-                                                    )
-                                                    Text(
-                                                        text = activeExternalSubtitleLabel,
-                                                        style = MaterialTheme.typography.bodyMedium,
-                                                        color = TextPrimary,
-                                                        maxLines = 1,
-                                                        overflow = TextOverflow.Ellipsis
+                                                        color = TextSecondary,
+                                                        fontSize = 11.sp
                                                     )
                                                 }
                                             }
-                                            Icon(Icons.Default.Check, contentDescription = null, tint = CineRed, modifier = Modifier.size(18.dp))
-                                        }
-                                    }
-                                }
-                            }
-
-                            // Embedded Tracks
-                            items(availableSubtitleTracks) { track ->
-                                val isSelected = selectedSubtitleIndex == track.index && activeExternalSubtitleLabel == null
-                                Card(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .clickable {
-                                            onSelectEmbeddedTrack(track.index)
-                                            onDismiss()
-                                        },
-                                    colors = CardDefaults.cardColors(
-                                        containerColor = if (isSelected) CineRed.copy(alpha = 0.2f) else DarkSurfaceVariant
-                                    ),
-                                    shape = RoundedCornerShape(8.dp)
-                                ) {
-                                    Row(
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .padding(12.dp),
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        horizontalArrangement = Arrangement.SpaceBetween
-                                    ) {
-                                        Column(modifier = Modifier.weight(1f)) {
-                                            Text(
-                                                text = track.label,
-                                                style = MaterialTheme.typography.bodyMedium,
-                                                color = TextPrimary,
-                                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
-                                            )
-                                            if (!track.language.isNullOrBlank()) {
-                                                Text(
-                                                    text = "Idioma: ${track.language}",
-                                                    style = MaterialTheme.typography.bodySmall,
-                                                    color = TextSecondary,
-                                                    fontSize = 11.sp
-                                                )
+                                            if (isSelected) {
+                                                Icon(Icons.Default.Check, contentDescription = "Selecionada", tint = CineRed, modifier = Modifier.size(18.dp))
                                             }
                                         }
-                                        if (isSelected) {
-                                            Icon(Icons.Default.Check, contentDescription = "Selecionada", tint = CineRed, modifier = Modifier.size(18.dp))
-                                        }
                                     }
                                 }
                             }
 
-                            if (availableSubtitleTracks.isEmpty() && activeExternalSubtitleLabel == null) {
+                            if (downloadedSubtitles.isEmpty() && availableSubtitleTracks.isEmpty() && activeExternalSubtitleLabel == null) {
                                 item {
                                     Text(
-                                        text = "Nenhuma faixa de legenda embutida no arquivo. Use a aba OpenSubtitles para buscar legendas online.",
+                                        text = "Nenhuma legenda local para este vídeo. Use a aba OpenSubtitles Online para buscar e baixar.",
                                         style = MaterialTheme.typography.bodySmall,
                                         color = TextSecondary,
                                         modifier = Modifier.padding(vertical = 12.dp)
@@ -333,7 +397,7 @@ fun SubtitleSelectionDialog(
                     }
 
                     1 -> {
-                        // OpenSubtitles.com Tab
+                        // OpenSubtitles Online Tab
                         Column(modifier = Modifier.fillMaxWidth()) {
                             if (openSubtitlesApiKey.isBlank()) {
                                 Surface(
@@ -348,14 +412,14 @@ fun SubtitleSelectionDialog(
                                         Icon(Icons.Default.Key, contentDescription = null, tint = AccentGold, modifier = Modifier.size(28.dp))
                                         Spacer(modifier = Modifier.height(6.dp))
                                         Text(
-                                            text = "Chave da API Necessária",
+                                            text = "Configuração do OpenSubtitles.com",
                                             style = MaterialTheme.typography.titleSmall,
                                             fontWeight = FontWeight.Bold,
                                             color = TextPrimary
                                         )
                                         Spacer(modifier = Modifier.height(4.dp))
                                         Text(
-                                            text = "Cadastre gratuitamente sua API Key do OpenSubtitles.com para buscar e sincronizar legendas em português.",
+                                            text = "Cadastre gratuitamente sua API Key e seu usuário/senha do OpenSubtitles.com para buscar e sincronizar legendas em português.",
                                             style = MaterialTheme.typography.bodySmall,
                                             color = TextSecondary,
                                             fontSize = 11.sp
@@ -369,12 +433,12 @@ fun SubtitleSelectionDialog(
                                             colors = ButtonDefaults.buttonColors(containerColor = CineRed),
                                             shape = RoundedCornerShape(6.dp)
                                         ) {
-                                            Text("Configurar API Key", fontSize = 12.sp)
+                                            Text("Configurar Credenciais", fontSize = 12.sp)
                                         }
                                     }
                                 }
                             } else {
-                                // Search Bar
+                                // Search Input
                                 Row(
                                     modifier = Modifier.fillMaxWidth(),
                                     verticalAlignment = Alignment.CenterVertically
@@ -409,13 +473,49 @@ fun SubtitleSelectionDialog(
                                 Spacer(modifier = Modifier.height(8.dp))
 
                                 if (searchError != null) {
-                                    Text(
-                                        text = searchError!!,
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = CineRed,
-                                        fontSize = 11.sp,
-                                        modifier = Modifier.padding(vertical = 4.dp)
-                                    )
+                                    Card(
+                                        colors = CardDefaults.cardColors(containerColor = Color(0xFFB71C1C)),
+                                        shape = RoundedCornerShape(6.dp),
+                                        modifier = Modifier.fillMaxWidth()
+                                    ) {
+                                        Row(
+                                            modifier = Modifier.padding(8.dp),
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                        ) {
+                                            Icon(Icons.Default.Error, contentDescription = null, tint = Color.White, modifier = Modifier.size(16.dp))
+                                            Text(
+                                                text = searchError!!,
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = Color.White,
+                                                fontSize = 11.sp
+                                            )
+                                        }
+                                    }
+                                    Spacer(modifier = Modifier.height(8.dp))
+                                }
+
+                                if (downloadError != null) {
+                                    Card(
+                                        colors = CardDefaults.cardColors(containerColor = Color(0xFFB71C1C)),
+                                        shape = RoundedCornerShape(6.dp),
+                                        modifier = Modifier.fillMaxWidth()
+                                    ) {
+                                        Row(
+                                            modifier = Modifier.padding(8.dp),
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                        ) {
+                                            Icon(Icons.Default.Error, contentDescription = null, tint = Color.White, modifier = Modifier.size(16.dp))
+                                            Text(
+                                                text = downloadError!!,
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = Color.White,
+                                                fontSize = 11.sp
+                                            )
+                                        }
+                                    }
+                                    Spacer(modifier = Modifier.height(8.dp))
                                 }
 
                                 LazyColumn(
@@ -455,6 +555,20 @@ fun SubtitleSelectionDialog(
                                                                 modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp)
                                                             )
                                                         }
+                                                        if (sub.isHashMatch) {
+                                                            Surface(
+                                                                color = Color(0xFF4CAF50).copy(alpha = 0.2f),
+                                                                shape = RoundedCornerShape(4.dp)
+                                                            ) {
+                                                                Text(
+                                                                    text = "HASH OK",
+                                                                    color = Color(0xFF4CAF50),
+                                                                    fontWeight = FontWeight.Bold,
+                                                                    fontSize = 9.sp,
+                                                                    modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp)
+                                                                )
+                                                            }
+                                                        }
                                                         if (sub.hearingImpaired) {
                                                             Icon(
                                                                 Icons.Default.HearingDisabled,
@@ -474,7 +588,7 @@ fun SubtitleSelectionDialog(
                                                             }
                                                         }
                                                         Text(
-                                                            text = "• ${sub.downloadCount} downloads",
+                                                            text = "• ${sub.downloadCount} dl",
                                                             fontSize = 10.sp,
                                                             color = TextSecondary
                                                         )
@@ -494,25 +608,26 @@ fun SubtitleSelectionDialog(
 
                                                 OutlinedButton(
                                                     onClick = {
-                                                        scope.launch {
-                                                            downloadingFileId = sub.fileId
-                                                            val downloaded = client.downloadAndConvertSubtitle(
-                                                                apiKey = openSubtitlesApiKey,
-                                                                fileId = sub.fileId,
-                                                                fileName = sub.fileName
-                                                            )
+                                                        downloadingFileId = sub.fileId
+                                                        downloadError = null
+                                                        onDownloadAndApplySubtitle(
+                                                            sub.fileId,
+                                                            sub.fileName,
+                                                            sub.language,
+                                                            sub.releaseName
+                                                        ) { result ->
                                                             downloadingFileId = null
-                                                            if (downloaded != null) {
-                                                                onApplyExternalSubtitle(
-                                                                    downloaded.first,
-                                                                    downloaded.second,
-                                                                    sub.releaseName
-                                                                )
-                                                                onDismiss()
+                                                            when (result) {
+                                                                is OsResult.Success -> {
+                                                                    onDismiss()
+                                                                }
+                                                                is OsResult.Error -> {
+                                                                    downloadError = result.message
+                                                                }
                                                             }
                                                         }
                                                     },
-                                                    enabled = !isDownloading,
+                                                    enabled = downloadingFileId == null,
                                                     shape = RoundedCornerShape(6.dp)
                                                 ) {
                                                     if (isDownloading) {

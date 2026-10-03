@@ -11,11 +11,13 @@ import com.example.cinelocal.data.dao.IptvChannelDao
 import com.example.cinelocal.data.dao.MediaDao
 import com.example.cinelocal.data.dao.NetworkServerDao
 import com.example.cinelocal.data.dao.SettingDao
+import com.example.cinelocal.data.dao.SubtitleFileDao
 import com.example.cinelocal.data.model.EpisodeEntity
 import com.example.cinelocal.data.model.IptvChannelEntity
 import com.example.cinelocal.data.model.MediaItemEntity
 import com.example.cinelocal.data.model.NetworkServerEntity
 import com.example.cinelocal.data.model.SettingEntity
+import com.example.cinelocal.data.model.SubtitleFileEntity
 
 @Database(
     entities = [
@@ -23,9 +25,10 @@ import com.example.cinelocal.data.model.SettingEntity
         EpisodeEntity::class,
         IptvChannelEntity::class,
         SettingEntity::class,
-        NetworkServerEntity::class
+        NetworkServerEntity::class,
+        SubtitleFileEntity::class
     ],
-    version = 3,
+    version = 4,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -35,6 +38,7 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun iptvChannelDao(): IptvChannelDao
     abstract fun settingDao(): SettingDao
     abstract fun networkServerDao(): NetworkServerDao
+    abstract fun subtitleFileDao(): SubtitleFileDao
 
     companion object {
         @Volatile
@@ -80,6 +84,27 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        val MIGRATION_3_4 = object : Migration(3, 4) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS `subtitle_files` (
+                        `id` TEXT NOT NULL,
+                        `episodeId` TEXT NOT NULL,
+                        `language` TEXT NOT NULL,
+                        `label` TEXT NOT NULL,
+                        `filePath` TEXT NOT NULL,
+                        `source` TEXT NOT NULL,
+                        `osFileId` INTEGER,
+                        `addedAt` INTEGER NOT NULL,
+                        PRIMARY KEY(`id`)
+                    )
+                    """.trimIndent()
+                )
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_subtitle_files_episodeId` ON `subtitle_files` (`episodeId`)")
+            }
+        }
+
         fun getInstance(context: Context): AppDatabase {
             return INSTANCE ?: synchronized(this) {
                 val instance = Room.databaseBuilder(
@@ -87,7 +112,7 @@ abstract class AppDatabase : RoomDatabase() {
                     AppDatabase::class.java,
                     "cinelocal.db"
                 )
-                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
+                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
                     .fallbackToDestructiveMigrationOnDowngrade()
                     .build()
                 INSTANCE = instance

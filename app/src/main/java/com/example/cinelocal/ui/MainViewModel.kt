@@ -62,17 +62,24 @@ class MainViewModel(
     private val _tmdbApiKey = MutableStateFlow("")
     val tmdbApiKey: StateFlow<String> = _tmdbApiKey.asStateFlow()
 
-    // OpenSubtitles Key setting
+    // OpenSubtitles settings
     private val _openSubtitlesApiKey = MutableStateFlow("")
     val openSubtitlesApiKey: StateFlow<String> = _openSubtitlesApiKey.asStateFlow()
+
+    private val _openSubtitlesUsername = MutableStateFlow("")
+    val openSubtitlesUsername: StateFlow<String> = _openSubtitlesUsername.asStateFlow()
+
+    private val _openSubtitlesPassword = MutableStateFlow("")
+    val openSubtitlesPassword: StateFlow<String> = _openSubtitlesPassword.asStateFlow()
 
     init {
         viewModelScope.launch {
             repository.loadInitialDataIfEmpty()
             val tmdbKey = repository.getSetting("tmdb_api_key").firstOrNull() ?: ""
             _tmdbApiKey.value = tmdbKey
-            val osKey = repository.getSetting("opensubtitles_api_key").firstOrNull() ?: ""
-            _openSubtitlesApiKey.value = osKey
+            _openSubtitlesApiKey.value = repository.getSetting("opensubtitles_api_key").firstOrNull() ?: ""
+            _openSubtitlesUsername.value = repository.getSetting("opensubtitles_username").firstOrNull() ?: ""
+            _openSubtitlesPassword.value = repository.getSetting("opensubtitles_password").firstOrNull() ?: ""
         }
     }
 
@@ -323,11 +330,15 @@ class MainViewModel(
         }
     }
 
-    fun saveOpenSubtitlesApiKey(key: String) {
+    fun saveOpenSubtitlesConfig(key: String, username: String, pass: String) {
         viewModelScope.launch {
             repository.setSetting("opensubtitles_api_key", key)
+            repository.setSetting("opensubtitles_username", username)
+            repository.setSetting("opensubtitles_password", pass)
             _openSubtitlesApiKey.value = key
-            _uiEvents.emit(UiEvent.ShowToast("Chave OpenSubtitles salva com sucesso!"))
+            _openSubtitlesUsername.value = username
+            _openSubtitlesPassword.value = pass
+            _uiEvents.emit(UiEvent.ShowToast("Credenciais OpenSubtitles salvas com sucesso!"))
         }
     }
 

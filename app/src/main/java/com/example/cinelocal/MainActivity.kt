@@ -253,6 +253,8 @@ fun CineLocalApp(
     val isLoading by mainViewModel.isLoading.collectAsStateWithLifecycle()
     val tmdbApiKey by mainViewModel.tmdbApiKey.collectAsStateWithLifecycle()
     val openSubtitlesApiKey by mainViewModel.openSubtitlesApiKey.collectAsStateWithLifecycle()
+    val openSubtitlesUsername by mainViewModel.openSubtitlesUsername.collectAsStateWithLifecycle()
+    val openSubtitlesPassword by mainViewModel.openSubtitlesPassword.collectAsStateWithLifecycle()
     val savedNetworkServers by mainViewModel.savedNetworkServers.collectAsStateWithLifecycle()
     val showSmbExplorer by mainViewModel.showSmbExplorer.collectAsStateWithLifecycle()
 
@@ -584,6 +586,7 @@ fun CineLocalApp(
                         SettingsScreen(
                             tmdbApiKey = tmdbApiKey,
                             openSubtitlesApiKey = openSubtitlesApiKey,
+                            openSubtitlesUsername = openSubtitlesUsername,
                             totalMediaCount = allMedia.size,
                             totalChannelCount = iptvChannels.size,
                             onOpenTmdbConfig = { showTmdbDialog = true },
@@ -692,10 +695,12 @@ fun CineLocalApp(
         if (showOpenSubtitlesDialog) {
             OpenSubtitlesConfigDialog(
                 initialKey = openSubtitlesApiKey,
+                initialUsername = openSubtitlesUsername,
+                initialPassword = openSubtitlesPassword,
                 onDismiss = { showOpenSubtitlesDialog = false },
-                onSaveKey = { key ->
-                    mainViewModel.saveOpenSubtitlesApiKey(key)
-                    playerViewModel.updateOpenSubtitlesApiKey(key)
+                onSaveConfig = { key, user, pass ->
+                    mainViewModel.saveOpenSubtitlesConfig(key, user, pass)
+                    playerViewModel.updateOpenSubtitlesCredentials(key, user, pass)
                 }
             )
         }

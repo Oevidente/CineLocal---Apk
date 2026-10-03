@@ -3,16 +3,18 @@ package com.example.cinelocal.data.subtitles
 import android.content.Context
 import android.net.Uri
 import android.util.Log
-import java.io.BufferedReader
 import java.io.File
 import java.io.InputStream
-import java.io.InputStreamReader
+import java.nio.ByteBuffer
+import java.nio.ByteOrder
+import java.nio.channels.FileChannel
 import java.nio.charset.Charset
 import java.nio.charset.StandardCharsets
 
 object SubtitleUtils {
 
     private const val TAG = "SubtitleUtils"
+    private const val HASH_CHUNK_SIZE = 65536L // 64 KB
 
     /**
      * Converte o conteúdo de um arquivo SRT para o formato WebVTT.
@@ -54,7 +56,7 @@ object SubtitleUtils {
 
         return try {
             val utf8Decoder = StandardCharsets.UTF_8.newDecoder()
-            val byteBuffer = java.nio.ByteBuffer.wrap(bytes, offset, bytes.size - offset)
+            val byteBuffer = ByteBuffer.wrap(bytes, offset, bytes.size - offset)
             utf8Decoder.decode(byteBuffer).toString()
         } catch (_: Exception) {
             try {
@@ -66,7 +68,24 @@ object SubtitleUtils {
     }
 
     /**
-     * Salva uma legenda WebVTT no diretório de cache do aplicativo e retorna o arquivo gerado.
+     * Salva uma legenda WebVTT de forma persistente no diretório interno filesDir/subtitles/<episodeId>/
+     * para que não seja apagada automaticamente pelo Android.
+     */
+    fun saveVttToPersistentStorage(
+        context: Context,
+        episodeId: String,
+        filename: String,
+        vttContent: String
+    ): File {
+        val subDir = File(File(context.filesDir, "subtitles"), episodeId).apply { if (!exists()) mkdirs() }
+        val safeName = filename.replace(Regex("[^a-zA-Z0-9._-]"), "_")
+        val file = File(subDir, if (safeName.endsWith(".vtt")) safeName else "$safeName.vtt")
+        file.writeText(vttContent, StandardCharsets.UTF_8)
+        return file
+    }
+
+    /**
+     * Legacy cache saver for temporary usage
      */
     fun saveVttToCache(context: Context, filename: String, vttContent: String): File {
         val subDir = File(context.cacheDir, "subtitles").apply { if (!exists()) mkdirs() }
@@ -74,6 +93,49 @@ object SubtitleUtils {
         val file = File(subDir, if (safeName.endsWith(".vtt")) safeName else "$safeName.vtt")
         file.writeText(vttContent, StandardCharsets.UTF_8)
         return file
+    }
+
+    /**
+     * Computa o OpenSubtitles MovieHash de um arquivo ou ContentUri.
+     * Algoritmo OpenSubtitles: soma de inteiros de 64 bits (little-endian) do tamanho do arquivo,
+     * primeiros 64KB e últimos 64KB. Formato: string hexadecimal de 16 caracteres.
+     */
+    fun computeMovieHash(context: Context, uri: Uri): String? {
+        try {
+            val pfd = context.contentResolver.openFileDescriptor(uri, "r") ?: return null
+            pfd.use { descriptor ->
+                val size = descriptor.statSize
+                if (size < HASH_CHUNK_SIZE) return null
+
+                val channel = java.io.FileInputStream(descriptor.fileDescriptor).channel
+                var headHash = 0L
+                var tailHash = 0L
+
+                // Read head 64KB
+                val headBuf = ByteBuffer.allocate(HASH_CHUNK_SIZE.toInt()).order(ByteOrder.LITTLE_ENDIAN)
+                channel.position(0)
+                channel.read(headBuf)
+                headBuf.rewind()
+                while (headBuf.hasRemaining()) {
+                    headHash += headBuf.long
+                }
+
+                // Read tail 64KB
+                val tailBuf = ByteBuffer.allocate(HASH_CHUNK_SIZE.toInt()).order(ByteOrder.LITTLE_ENDIAN)
+                channel.position((size - HASH_CHUNK_SIZE).coerceAtLeast(0L))
+                channel.read(tailBuf)
+                tailBuf.rewind()
+                while (tailBuf.hasRemaining()) {
+                    tailHash += tailBuf.long
+                }
+
+                val totalHash = size + headHash + tailHash
+                return String.format("%016x", totalHash)
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "Não foi possível calcular MovieHash para $uri: ${e.message}")
+            return null
+        }
     }
 
     /**

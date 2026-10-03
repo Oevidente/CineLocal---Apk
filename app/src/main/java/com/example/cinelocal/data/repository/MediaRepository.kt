@@ -34,6 +34,23 @@ class MediaRepository(
     private val iptvChannelDao = database.iptvChannelDao()
     private val settingDao = database.settingDao()
     private val networkServerDao = database.networkServerDao()
+    private val subtitleFileDao = database.subtitleFileDao()
+
+    fun getSubtitlesForEpisode(episodeId: String): Flow<List<com.example.cinelocal.data.model.SubtitleFileEntity>> {
+        return subtitleFileDao.getSubtitlesForEpisode(episodeId)
+    }
+
+    suspend fun getSubtitlesListForEpisode(episodeId: String): List<com.example.cinelocal.data.model.SubtitleFileEntity> = withContext(Dispatchers.IO) {
+        subtitleFileDao.getSubtitlesListForEpisode(episodeId)
+    }
+
+    suspend fun saveSubtitleFile(subtitle: com.example.cinelocal.data.model.SubtitleFileEntity) = withContext(Dispatchers.IO) {
+        subtitleFileDao.insertSubtitle(subtitle)
+    }
+
+    suspend fun deleteSubtitleFile(id: String) = withContext(Dispatchers.IO) {
+        subtitleFileDao.deleteSubtitleById(id)
+    }
 
     val allNetworkServers: Flow<List<com.example.cinelocal.data.model.NetworkServerEntity>> = networkServerDao.getAllServers()
     val allMedia: Flow<List<MediaItemEntity>> = mediaDao.getAllMedia()
