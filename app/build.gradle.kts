@@ -109,6 +109,9 @@ dependencies {
     implementation(libs.play.services.cast.framework)
     implementation(libs.androidx.mediarouter)
 
+    // SMB Protocol (Windows / PC Local Network Share)
+    implementation(libs.smbj)
+
     debugImplementation(libs.androidx.ui.tooling)
     debugImplementation(libs.androidx.ui.test.manifest)
     testImplementation(libs.junit)

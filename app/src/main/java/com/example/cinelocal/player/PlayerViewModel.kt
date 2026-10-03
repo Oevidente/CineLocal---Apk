@@ -12,6 +12,7 @@ import androidx.media3.common.PlaybackParameters
 import androidx.media3.common.Player
 import androidx.media3.common.TrackSelectionOverride
 import androidx.media3.common.Tracks
+import androidx.media3.common.MimeTypes
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.ui.AspectRatioFrameLayout
@@ -27,8 +28,10 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import java.io.File
 
 enum class ResizeMode(val mode: Int, val label: String) {
     FIT(AspectRatioFrameLayout.RESIZE_MODE_FIT, "Ajustar"),
@@ -54,6 +57,7 @@ data class PlayerUiState(
     val availableSubtitleTracks: List<TrackInfo> = emptyList(),
     val selectedAudioIndex: Int = -1,
     val selectedSubtitleIndex: Int = -1,
+    val activeExternalSubtitleLabel: String? = null,
     val errorMessage: String? = null,
     val errorDetails: String? = null,
     val canRetry: Boolean = false,
@@ -79,15 +83,24 @@ class PlayerViewModel(
     private val _uiState = MutableStateFlow(PlayerUiState())
     val uiState: StateFlow<PlayerUiState> = _uiState.asStateFlow()
 
+    private val _openSubtitlesApiKey = MutableStateFlow("")
+    val openSubtitlesApiKey: StateFlow<String> = _openSubtitlesApiKey.asStateFlow()
+
     private var progressTrackingJob: Job? = null
     private var currentEpisode: EpisodeEntity? = null
     private var currentChannel: IptvChannelEntity? = null
     private var currentMediaTitle: String = ""
     private var allEpisodesInSeries: List<EpisodeEntity> = emptyList()
     private var currentSourceUri: Uri? = null
+    private var currentVttFile: File? = null
+    private var currentVttContent: String? = null
 
     init {
         castManager.init()
+        viewModelScope.launch {
+            val key = repository.getSetting("opensubtitles_api_key").firstOrNull() ?: ""
+            _openSubtitlesApiKey.value = key
+        }
         viewModelScope.launch {
             castState.collect { cState ->
                 _uiState.value = _uiState.value.copy(
@@ -622,13 +635,77 @@ class PlayerViewModel(
                                 TrackSelectionOverride(trackGroup, listOf(i))
                             )
                             .build()
-                        _uiState.value = _uiState.value.copy(selectedSubtitleIndex = trackIndex)
+                        _uiState.value = _uiState.value.copy(
+                            selectedSubtitleIndex = trackIndex,
+                            activeExternalSubtitleLabel = null
+                        )
                         return
                     }
                     currentIndex++
                 }
             }
         }
+    }
+
+    fun disableSubtitles() {
+        val p = exoPlayer ?: return
+        p.trackSelectionParameters = p.trackSelectionParameters
+            .buildUpon()
+            .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, true)
+            .build()
+        currentVttFile = null
+        currentVttContent = null
+        _uiState.value = _uiState.value.copy(
+            selectedSubtitleIndex = -1,
+            activeExternalSubtitleLabel = null
+        )
+    }
+
+    fun applyExternalSubtitle(file: File, vttContent: String, label: String) {
+        currentVttFile = file
+        currentVttContent = vttContent
+        _uiState.value = _uiState.value.copy(
+            activeExternalSubtitleLabel = label,
+            selectedSubtitleIndex = -2
+        )
+
+        // Se estiver no Cast, registrar no proxy e recarregar mídia com a legenda WebVTT
+        if (castState.value.isConnected && currentEpisode != null) {
+            val subUrl = castManager.proxyServer.registerSubtitle(vttContent)
+            val pos = _uiState.value.currentPosition
+            castManager.castEpisode(
+                episode = currentEpisode!!,
+                mediaTitle = currentMediaTitle,
+                startPositionMs = pos,
+                subtitleVttUrl = subUrl
+            )
+            return
+        }
+
+        // Se estiver no ExoPlayer nativo, injetar a faixa de legenda WebVTT
+        val sourceUri = currentSourceUri ?: return
+        val currentPos = exoPlayer?.currentPosition ?: 0L
+        val isPlaying = exoPlayer?.isPlaying ?: true
+
+        val subtitleConfig = MediaItem.SubtitleConfiguration.Builder(Uri.fromFile(file))
+            .setMimeType(MimeTypes.TEXT_VTT)
+            .setLanguage("pt-BR")
+            .setLabel(label)
+            .setSelectionFlags(C.SELECTION_FLAG_DEFAULT)
+            .build()
+
+        val newMediaItem = MediaItem.Builder()
+            .setUri(sourceUri)
+            .setSubtitleConfigurations(listOf(subtitleConfig))
+            .build()
+
+        player.setMediaItem(newMediaItem, currentPos)
+        player.prepare()
+        if (isPlaying) player.play()
+    }
+
+    fun updateOpenSubtitlesApiKey(key: String) {
+        _openSubtitlesApiKey.value = key
     }
 
     fun releasePlayer() {

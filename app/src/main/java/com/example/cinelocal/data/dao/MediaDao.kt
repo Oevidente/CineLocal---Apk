@@ -16,6 +16,9 @@ interface MediaDao {
     @Query("SELECT * FROM media_items ORDER BY addedTimestamp DESC")
     fun getAllMedia(): Flow<List<MediaItemEntity>>
 
+    @Query("SELECT * FROM media_items")
+    suspend fun getAllMediaList(): List<MediaItemEntity>
+
     @Transaction
     @Query("SELECT * FROM media_items ORDER BY addedTimestamp DESC")
     fun getAllMediaWithEpisodes(): Flow<List<MediaWithEpisodes>>

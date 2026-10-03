@@ -72,6 +72,7 @@ import com.example.cinelocal.data.model.MediaKind
 import com.example.cinelocal.data.repository.MediaRepository
 import com.example.cinelocal.player.PlayerViewModel
 import com.example.cinelocal.ui.MainViewModel
+import com.example.cinelocal.data.model.EpisodeEntity
 import com.example.cinelocal.ui.UiEvent
 import com.example.cinelocal.ui.components.AddMediaDialog
 import com.example.cinelocal.ui.components.CastButton
@@ -79,6 +80,8 @@ import com.example.cinelocal.ui.components.CastDeviceDialog
 import com.example.cinelocal.ui.components.IptvImportDialog
 import com.example.cinelocal.ui.components.MediaDetailSheet
 import com.example.cinelocal.ui.components.NativeCastButton
+import com.example.cinelocal.ui.components.OpenSubtitlesConfigDialog
+import com.example.cinelocal.ui.components.SmbExplorerDialog
 import com.example.cinelocal.ui.components.TmdbConfigDialog
 import com.example.cinelocal.ui.screens.ChannelsScreen
 import com.example.cinelocal.ui.screens.FavoritesScreen
@@ -154,6 +157,7 @@ fun CineLocalApp(
     var showAddDialog by remember { mutableStateOf(false) }
     var showIptvDialog by remember { mutableStateOf(false) }
     var showTmdbDialog by remember { mutableStateOf(false) }
+    var showOpenSubtitlesDialog by remember { mutableStateOf(false) }
     var showCastDialog by remember { mutableStateOf(false) }
 
     // Cast state
@@ -173,6 +177,37 @@ fun CineLocalApp(
                 // Ignore if not supported
             }
             mainViewModel.addFolderByUri(uri, null)
+        }
+    }
+
+    // Storage Access Framework Standalone Video Files Picker
+    val filesPickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenMultipleDocuments()
+    ) { uris ->
+        if (!uris.isNullOrEmpty()) {
+            for (uri in uris) {
+                try {
+                    context.contentResolver.takePersistableUriPermission(
+                        uri,
+                        Intent.FLAG_GRANT_READ_URI_PERMISSION
+                    )
+                } catch (_: Exception) {}
+            }
+            mainViewModel.addStandaloneVideoFiles(uris) { firstMedia ->
+                val firstEp = EpisodeEntity(
+                    mediaId = firstMedia.id,
+                    seasonNumber = 0,
+                    episodeNumber = 1,
+                    title = firstMedia.title,
+                    uriString = uris.first().toString()
+                )
+                playerViewModel.playMediaEpisode(
+                    episode = firstEp,
+                    mediaTitle = firstMedia.title,
+                    allEpisodes = listOf(firstEp)
+                )
+                isPlayerActive = true
+            }
         }
     }
 
@@ -217,6 +252,9 @@ fun CineLocalApp(
     val selectedMediaWithEpisodes by mainViewModel.selectedMediaWithEpisodes.collectAsStateWithLifecycle()
     val isLoading by mainViewModel.isLoading.collectAsStateWithLifecycle()
     val tmdbApiKey by mainViewModel.tmdbApiKey.collectAsStateWithLifecycle()
+    val openSubtitlesApiKey by mainViewModel.openSubtitlesApiKey.collectAsStateWithLifecycle()
+    val savedNetworkServers by mainViewModel.savedNetworkServers.collectAsStateWithLifecycle()
+    val showSmbExplorer by mainViewModel.showSmbExplorer.collectAsStateWithLifecycle()
 
     // Handle One-shot UI Events
     LaunchedEffect(Unit) {
@@ -377,7 +415,10 @@ fun CineLocalApp(
                             label = {
                                 Text(
                                     text = tab.label,
-                                    fontSize = 10.sp,
+                                    fontSize = 9.sp,
+                                    maxLines = 1,
+                                    softWrap = false,
+                                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
                                     fontWeight = if (activeTab == tab) FontWeight.Bold else FontWeight.Normal
                                 )
                             },
@@ -471,6 +512,7 @@ fun CineLocalApp(
                             onFavoriteToggle = { media -> mainViewModel.toggleMediaFavorite(media) },
                             onChannelFavoriteToggle = { channel -> mainViewModel.toggleChannelFavorite(channel) },
                             onAddMediaClick = { showAddDialog = true },
+                            onOpenPcNetwork = { mainViewModel.openSmbExplorer() },
                             onNavigateToMovies = { activeTab = AppTab.MOVIES },
                             onNavigateToSeries = { activeTab = AppTab.SERIES },
                             onNavigateToTorrents = { activeTab = AppTab.TORRENTS },
@@ -541,10 +583,13 @@ fun CineLocalApp(
                     AppTab.SETTINGS -> {
                         SettingsScreen(
                             tmdbApiKey = tmdbApiKey,
+                            openSubtitlesApiKey = openSubtitlesApiKey,
                             totalMediaCount = allMedia.size,
                             totalChannelCount = iptvChannels.size,
                             onOpenTmdbConfig = { showTmdbDialog = true },
+                            onOpenOpenSubtitlesConfig = { showOpenSubtitlesDialog = true },
                             onOpenIptvManager = { showIptvDialog = true },
+                            onOpenPcNetwork = { mainViewModel.openSmbExplorer() },
                             onRescanLibrary = { mainViewModel.rescanAll() }
                         )
                     }
@@ -575,12 +620,51 @@ fun CineLocalApp(
         if (showAddDialog) {
             AddMediaDialog(
                 onDismiss = { showAddDialog = false },
+                onPickFilesClick = {
+                    filesPickerLauncher.launch(
+                        arrayOf(
+                            "video/*",
+                            "application/x-matroska",
+                            "application/octet-stream"
+                        )
+                    )
+                },
                 onPickFolderClick = { folderPickerLauncher.launch(null) },
+                onOpenPcNetworkClick = {
+                    mainViewModel.openSmbExplorer()
+                },
                 onAddDirectStream = { title, url, isSeries ->
                     mainViewModel.addDirectMedia(title, url, isSeries)
                 },
                 onAddTorrentStream = { magnetUri, customTitle, isSeries ->
                     mainViewModel.addTorrentMedia(magnetUri, customTitle, isSeries)
+                }
+            )
+        }
+
+        if (showSmbExplorer) {
+            SmbExplorerDialog(
+                onDismiss = { mainViewModel.closeSmbExplorer() },
+                savedServers = savedNetworkServers,
+                onSaveServer = { server -> mainViewModel.saveNetworkServer(server) },
+                onDeleteServer = { server -> mainViewModel.deleteNetworkServer(server) },
+                onPlaySmbVideo = { streamUrl, title ->
+                    val ep = EpisodeEntity(
+                        mediaId = "smb_temp",
+                        seasonNumber = 0,
+                        episodeNumber = 1,
+                        title = title,
+                        streamUrl = streamUrl
+                    )
+                    playerViewModel.playMediaEpisode(
+                        episode = ep,
+                        mediaTitle = title,
+                        allEpisodes = listOf(ep)
+                    )
+                    isPlayerActive = true
+                },
+                onImportFolderToLibrary = { config, shareName, dirPath ->
+                    mainViewModel.importSmbFolder(config, shareName, dirPath)
                 }
             )
         }
@@ -605,15 +689,22 @@ fun CineLocalApp(
             )
         }
 
+        if (showOpenSubtitlesDialog) {
+            OpenSubtitlesConfigDialog(
+                initialKey = openSubtitlesApiKey,
+                onDismiss = { showOpenSubtitlesDialog = false },
+                onSaveKey = { key ->
+                    mainViewModel.saveOpenSubtitlesApiKey(key)
+                    playerViewModel.updateOpenSubtitlesApiKey(key)
+                }
+            )
+        }
+
         if (showCastDialog) {
             CastDeviceDialog(
                 castState = castState,
                 onSelectDevice = { routeId ->
                     playerViewModel.castManager.selectDevice(routeId)
-                    playerViewModel.triggerCastForCurrentMedia()
-                },
-                onConnectByIp = { ip ->
-                    playerViewModel.castManager.connectByIp(ip)
                     playerViewModel.triggerCastForCurrentMedia()
                 },
                 onRefreshDiscovery = {

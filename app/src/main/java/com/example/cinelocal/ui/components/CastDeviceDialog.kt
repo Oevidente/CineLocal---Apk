@@ -14,16 +14,13 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Cast
 import androidx.compose.material.icons.filled.CastConnected
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Refresh
-import androidx.compose.material.icons.filled.Router
 import androidx.compose.material.icons.filled.Tv
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -31,22 +28,15 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.example.cinelocal.cast.CastState
 import com.example.cinelocal.ui.theme.AccentGold
 import com.example.cinelocal.ui.theme.CineRed
@@ -59,14 +49,11 @@ import com.example.cinelocal.ui.theme.TextSecondary
 fun CastDeviceDialog(
     castState: CastState,
     onSelectDevice: (String) -> Unit,
-    onConnectByIp: (String) -> Unit,
     onRefreshDiscovery: () -> Unit,
     onDisconnect: () -> Unit,
-    onDismiss: () -> Unit
+    onDismiss: () -> Unit,
+    onOpenDiagnostics: () -> Unit = {}
 ) {
-    var ipInput by remember { mutableStateOf("") }
-    var showIpInput by remember { mutableStateOf(false) }
-
     AlertDialog(
         onDismissRequest = onDismiss,
         containerColor = DarkSurface,
@@ -107,6 +94,23 @@ fun CastDeviceDialog(
         },
         text = {
             Column(modifier = Modifier.fillMaxWidth()) {
+                castState.lastError?.let { err ->
+                    Card(
+                        colors = CardDefaults.cardColors(containerColor = CineRed.copy(alpha = 0.15f)),
+                        shape = RoundedCornerShape(8.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(bottom = 12.dp)
+                    ) {
+                        Text(
+                            text = err,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = CineRed,
+                            modifier = Modifier.padding(10.dp)
+                        )
+                    }
+                }
+
                 if (castState.isConnected) {
                     Card(
                         modifier = Modifier.fillMaxWidth(),
@@ -130,7 +134,7 @@ fun CastDeviceDialog(
                                         color = TextPrimary
                                     )
                                     Text(
-                                        text = "Conectado via Transmissão",
+                                        text = "Conectado via Google Cast",
                                         style = MaterialTheme.typography.bodySmall,
                                         color = AccentGold
                                     )
@@ -140,37 +144,36 @@ fun CastDeviceDialog(
                             if (castState.title.isNotBlank()) {
                                 Spacer(modifier = Modifier.height(12.dp))
                                 Text(
-                                    text = "Reproduzindo agora:",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = TextSecondary
-                                )
-                                Text(
                                     text = castState.title,
                                     style = MaterialTheme.typography.bodyMedium,
                                     fontWeight = FontWeight.SemiBold,
                                     color = TextPrimary
                                 )
+                                if (castState.subtitle.isNotBlank()) {
+                                    Text(
+                                        text = castState.subtitle,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = TextSecondary
+                                    )
+                                }
+                            }
+
+                            Spacer(modifier = Modifier.height(16.dp))
+
+                            OutlinedButton(
+                                onClick = onDisconnect,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .testTag("disconnect_cast_btn"),
+                                shape = RoundedCornerShape(8.dp)
+                            ) {
+                                Text("Desconectar da TV", color = CineRed)
                             }
                         }
                     }
-
-                    Spacer(modifier = Modifier.height(16.dp))
-
-                    Button(
-                        onClick = {
-                            onDisconnect()
-                            onDismiss()
-                        },
-                        colors = ButtonDefaults.buttonColors(containerColor = CineRed),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .testTag("cast_disconnect_button")
-                    ) {
-                        Text("Desconectar Transmissão", color = Color.White, fontWeight = FontWeight.Bold)
-                    }
                 } else {
                     Text(
-                        text = "Dispositivos Google Cast, Smart TVs (DLNA/UPnP) na mesma rede Wi-Fi:",
+                        text = "Dispositivos disponíveis na mesma rede Wi-Fi:",
                         style = MaterialTheme.typography.bodySmall,
                         color = TextSecondary
                     )
@@ -181,22 +184,25 @@ fun CastDeviceDialog(
                         LazyColumn(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .height(160.dp)
+                                .height(160.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
-                            items(castState.availableDevices) { device ->
+                            items(castState.availableDevices, key = { it.id }) { device ->
                                 Card(
                                     modifier = Modifier
                                         .fillMaxWidth()
-                                        .padding(vertical = 4.dp)
                                         .clickable {
                                             onSelectDevice(device.id)
                                             onDismiss()
-                                        },
+                                        }
+                                        .testTag("device_item_${device.id}"),
                                     colors = CardDefaults.cardColors(containerColor = DarkSurfaceVariant),
                                     shape = RoundedCornerShape(8.dp)
                                 ) {
                                     Row(
-                                        modifier = Modifier.padding(12.dp),
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(12.dp),
                                         verticalAlignment = Alignment.CenterVertically
                                     ) {
                                         Icon(
@@ -229,7 +235,7 @@ fun CastDeviceDialog(
                         Box(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(vertical = 12.dp),
+                                .padding(vertical = 16.dp),
                             contentAlignment = Alignment.Center
                         ) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -248,52 +254,19 @@ fun CastDeviceDialog(
                         }
                     }
 
-                    Spacer(modifier = Modifier.height(12.dp))
+                    Spacer(modifier = Modifier.height(10.dp))
 
-                    // Direct IP Option
-                    if (!showIpInput) {
-                        OutlinedButton(
-                            onClick = { showIpInput = true },
-                            modifier = Modifier.fillMaxWidth(),
-                            shape = RoundedCornerShape(8.dp)
-                        ) {
-                            Icon(imageVector = Icons.Default.Router, contentDescription = null, tint = AccentGold)
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text("Conectar diretamente por IP da TV", color = TextPrimary)
-                        }
-                    } else {
-                        Column(modifier = Modifier.fillMaxWidth()) {
-                            OutlinedTextField(
-                                value = ipInput,
-                                onValueChange = { ipInput = it },
-                                label = { Text("IP da Smart TV (ex: 192.168.1.50)", color = TextSecondary) },
-                                singleLine = true,
-                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                                colors = OutlinedTextFieldDefaults.colors(
-                                    focusedBorderColor = AccentGold,
-                                    unfocusedBorderColor = TextSecondary.copy(alpha = 0.5f),
-                                    focusedTextColor = TextPrimary,
-                                    unfocusedTextColor = TextPrimary
-                                ),
-                                modifier = Modifier.fillMaxWidth()
-                            )
-
-                            Spacer(modifier = Modifier.height(8.dp))
-
-                            Button(
-                                onClick = {
-                                    if (ipInput.isNotBlank()) {
-                                        onConnectByIp(ipInput)
-                                        onDismiss()
-                                    }
-                                },
-                                colors = ButtonDefaults.buttonColors(containerColor = AccentGold),
-                                modifier = Modifier.fillMaxWidth(),
-                                shape = RoundedCornerShape(8.dp)
-                            ) {
-                                Text("Conectar por IP", color = Color.Black, fontWeight = FontWeight.Bold)
-                            }
-                        }
+                    OutlinedButton(
+                        onClick = {
+                            onDismiss()
+                            onOpenDiagnostics()
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(8.dp)
+                    ) {
+                        Icon(Icons.Default.Info, contentDescription = null, tint = TextSecondary, modifier = Modifier.size(18.dp))
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Diagnóstico do Cast", color = TextSecondary, fontSize = 13.sp)
                     }
                 }
             }

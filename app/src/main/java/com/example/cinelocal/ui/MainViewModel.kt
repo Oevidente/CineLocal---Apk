@@ -62,11 +62,17 @@ class MainViewModel(
     private val _tmdbApiKey = MutableStateFlow("")
     val tmdbApiKey: StateFlow<String> = _tmdbApiKey.asStateFlow()
 
+    // OpenSubtitles Key setting
+    private val _openSubtitlesApiKey = MutableStateFlow("")
+    val openSubtitlesApiKey: StateFlow<String> = _openSubtitlesApiKey.asStateFlow()
+
     init {
         viewModelScope.launch {
             repository.loadInitialDataIfEmpty()
-            val key = repository.getSetting("tmdb_api_key").firstOrNull() ?: ""
-            _tmdbApiKey.value = key
+            val tmdbKey = repository.getSetting("tmdb_api_key").firstOrNull() ?: ""
+            _tmdbApiKey.value = tmdbKey
+            val osKey = repository.getSetting("opensubtitles_api_key").firstOrNull() ?: ""
+            _openSubtitlesApiKey.value = osKey
         }
     }
 
@@ -131,6 +137,53 @@ class MainViewModel(
     val favoriteChannels: StateFlow<List<IptvChannelEntity>> = repository.favoriteChannels
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
+    val savedNetworkServers: StateFlow<List<com.example.cinelocal.data.model.NetworkServerEntity>> = repository.allNetworkServers
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    private val _showSmbExplorer = MutableStateFlow(false)
+    val showSmbExplorer: StateFlow<Boolean> = _showSmbExplorer.asStateFlow()
+
+    fun openSmbExplorer() {
+        _showSmbExplorer.value = true
+    }
+
+    fun closeSmbExplorer() {
+        _showSmbExplorer.value = false
+    }
+
+    fun saveNetworkServer(server: com.example.cinelocal.data.model.NetworkServerEntity) {
+        viewModelScope.launch {
+            repository.saveNetworkServer(server)
+            _uiEvents.emit(UiEvent.ShowToast("Computador '${server.name}' salvo!"))
+        }
+    }
+
+    fun deleteNetworkServer(server: com.example.cinelocal.data.model.NetworkServerEntity) {
+        viewModelScope.launch {
+            repository.deleteNetworkServer(server)
+            _uiEvents.emit(UiEvent.ShowToast("Computador removido"))
+        }
+    }
+
+    fun importSmbFolder(
+        config: com.example.cinelocal.data.smb.SmbConnectionConfig,
+        shareName: String,
+        dirPath: String
+    ) {
+        viewModelScope.launch {
+            _isLoading.value = true
+            try {
+                _uiEvents.emit(UiEvent.ShowToast("Escaneando pasta remota no computador..."))
+                val count = repository.importSmbFolder(config, shareName, dirPath)
+                _uiEvents.emit(UiEvent.ShowToast("$count título(s) importado(s) do computador para a biblioteca!"))
+            } catch (e: Exception) {
+                _uiEvents.emit(UiEvent.ShowToast("Erro ao importar do computador: ${e.localizedMessage}"))
+            } finally {
+                _isLoading.value = false
+            }
+        }
+    }
+
     fun setSearchQuery(query: String) {
         _searchQuery.value = query
     }
@@ -180,6 +233,25 @@ class MainViewModel(
                 selectMedia(media)
             } catch (e: Exception) {
                 _uiEvents.emit(UiEvent.ShowToast("Erro: ${e.localizedMessage}"))
+            } finally {
+                _isLoading.value = false
+            }
+        }
+    }
+
+    fun addStandaloneVideoFiles(uris: List<Uri>, onFirstItemReady: ((MediaItemEntity) -> Unit)? = null) {
+        viewModelScope.launch {
+            _isLoading.value = true
+            try {
+                val added = repository.addStandaloneVideoFiles(uris, getApplication())
+                val count = added.size
+                _uiEvents.emit(UiEvent.ShowToast("$count vídeo(s) adicionado(s) à biblioteca!"))
+                added.firstOrNull()?.let { first ->
+                    selectMedia(first)
+                    onFirstItemReady?.invoke(first)
+                }
+            } catch (e: Exception) {
+                _uiEvents.emit(UiEvent.ShowToast("Erro ao adicionar vídeos: ${e.localizedMessage}"))
             } finally {
                 _isLoading.value = false
             }
@@ -248,6 +320,14 @@ class MainViewModel(
             repository.setSetting("tmdb_api_key", key)
             _tmdbApiKey.value = key
             _uiEvents.emit(UiEvent.ShowToast("Chave TMDb salva com sucesso!"))
+        }
+    }
+
+    fun saveOpenSubtitlesApiKey(key: String) {
+        viewModelScope.launch {
+            repository.setSetting("opensubtitles_api_key", key)
+            _openSubtitlesApiKey.value = key
+            _uiEvents.emit(UiEvent.ShowToast("Chave OpenSubtitles salva com sucesso!"))
         }
     }
 

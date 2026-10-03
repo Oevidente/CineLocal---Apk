@@ -38,6 +38,7 @@ fun PlayerScreen(
     val context = LocalContext.current
     val uiState by playerViewModel.uiState.collectAsStateWithLifecycle()
     val castState by playerViewModel.castState.collectAsStateWithLifecycle()
+    val openSubtitlesApiKey by playerViewModel.openSubtitlesApiKey.collectAsStateWithLifecycle()
 
     var showCastDialog by remember { mutableStateOf(false) }
 
@@ -109,6 +110,7 @@ fun PlayerScreen(
         PlayerOverlay(
             uiState = uiState,
             castState = castState,
+            openSubtitlesApiKey = openSubtitlesApiKey,
             onBackClick = onBackClick,
             onPlayPauseClick = { playerViewModel.togglePlayPause() },
             onSeekBack = { playerViewModel.seekBack() },
@@ -118,6 +120,11 @@ fun PlayerScreen(
             onResizeModeCycle = { playerViewModel.cycleResizeMode() },
             onSelectAudioTrack = { idx -> playerViewModel.selectAudioTrack(idx) },
             onSelectSubtitleTrack = { idx -> playerViewModel.selectSubtitleTrack(idx) },
+            onApplyExternalSubtitle = { file, content, label ->
+                playerViewModel.applyExternalSubtitle(file, content, label)
+            },
+            onDisableSubtitles = { playerViewModel.disableSubtitles() },
+            onOpenSettingsForApiKey = { onBackClick() },
             onNextEpisodeClick = { playerViewModel.playNextEpisode() },
             onCastClick = {
                 openCastWithPermissions()
@@ -131,10 +138,6 @@ fun PlayerScreen(
                 castState = castState,
                 onSelectDevice = { routeId ->
                     playerViewModel.castManager.selectDevice(routeId)
-                    playerViewModel.triggerCastForCurrentMedia()
-                },
-                onConnectByIp = { ip ->
-                    playerViewModel.castManager.connectByIp(ip)
                     playerViewModel.triggerCastForCurrentMedia()
                 },
                 onRefreshDiscovery = {

@@ -19,15 +19,20 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Computer
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Tv
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -70,6 +75,7 @@ fun HomeScreen(
     onFavoriteToggle: (MediaItemEntity) -> Unit,
     onChannelFavoriteToggle: (IptvChannelEntity) -> Unit,
     onAddMediaClick: () -> Unit,
+    onOpenPcNetwork: () -> Unit = {},
     onNavigateToMovies: () -> Unit,
     onNavigateToSeries: () -> Unit,
     onNavigateToTorrents: () -> Unit = {},
@@ -293,19 +299,27 @@ fun HomeScreen(
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(32.dp),
+                        .padding(24.dp),
                     contentAlignment = Alignment.Center
                 ) {
                     Column(
                         horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.spacedBy(16.dp)
+                        verticalArrangement = Arrangement.spacedBy(14.dp)
                     ) {
-                        Icon(
-                            imageVector = Icons.Default.Folder,
-                            contentDescription = null,
-                            tint = CineRed,
-                            modifier = Modifier.size(64.dp)
-                        )
+                        Surface(
+                            color = CineRed.copy(alpha = 0.15f),
+                            shape = RoundedCornerShape(16.dp),
+                            modifier = Modifier.size(72.dp)
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Icon(
+                                    imageVector = Icons.Default.Folder,
+                                    contentDescription = null,
+                                    tint = CineRed,
+                                    modifier = Modifier.size(38.dp)
+                                )
+                            }
+                        }
                         Text(
                             text = "Sua biblioteca CineLocal",
                             style = MaterialTheme.typography.titleLarge,
@@ -313,13 +327,46 @@ fun HomeScreen(
                             fontWeight = FontWeight.Bold
                         )
                         Text(
-                            text = "Adicione pastas de filmes ou séries locais do seu dispositivo, ou importe uma lista de canais de TV ao vivo.",
+                            text = "Adicione vídeos do seu celular ou conecte seu Computador / PC pela rede Wi-Fi para assistir seus filmes e séries.",
                             style = MaterialTheme.typography.bodyMedium,
-                            color = TextSecondary
+                            color = TextSecondary,
+                            textAlign = androidx.compose.ui.text.style.TextAlign.Center
                         )
+
+                        Spacer(modifier = Modifier.height(4.dp))
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Button(
+                                onClick = onAddMediaClick,
+                                colors = ButtonDefaults.buttonColors(containerColor = CineRed),
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp))
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text("Adicionar", fontSize = 12.sp, color = Color.White)
+                            }
+
+                            OutlinedButton(
+                                onClick = onOpenPcNetwork,
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Computer,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(16.dp),
+                                    tint = Color(0xFF38BDF8)
+                                )
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text("Conectar PC", fontSize = 12.sp, color = TextPrimary)
+                            }
+                        }
                     }
                 }
             }
         }
     }
 }
+

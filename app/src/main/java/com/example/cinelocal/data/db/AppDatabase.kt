@@ -9,10 +9,12 @@ import androidx.sqlite.db.SupportSQLiteDatabase
 import com.example.cinelocal.data.dao.EpisodeDao
 import com.example.cinelocal.data.dao.IptvChannelDao
 import com.example.cinelocal.data.dao.MediaDao
+import com.example.cinelocal.data.dao.NetworkServerDao
 import com.example.cinelocal.data.dao.SettingDao
 import com.example.cinelocal.data.model.EpisodeEntity
 import com.example.cinelocal.data.model.IptvChannelEntity
 import com.example.cinelocal.data.model.MediaItemEntity
+import com.example.cinelocal.data.model.NetworkServerEntity
 import com.example.cinelocal.data.model.SettingEntity
 
 @Database(
@@ -20,9 +22,10 @@ import com.example.cinelocal.data.model.SettingEntity
         MediaItemEntity::class,
         EpisodeEntity::class,
         IptvChannelEntity::class,
-        SettingEntity::class
+        SettingEntity::class,
+        NetworkServerEntity::class
     ],
-    version = 2,
+    version = 3,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -31,6 +34,7 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun episodeDao(): EpisodeDao
     abstract fun iptvChannelDao(): IptvChannelDao
     abstract fun settingDao(): SettingDao
+    abstract fun networkServerDao(): NetworkServerDao
 
     companion object {
         @Volatile
@@ -53,6 +57,29 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        val MIGRATION_2_3 = object : Migration(2, 3) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS `network_servers` (
+                        `id` TEXT NOT NULL,
+                        `name` TEXT NOT NULL,
+                        `host` TEXT NOT NULL,
+                        `port` INTEGER NOT NULL,
+                        `username` TEXT NOT NULL,
+                        `password` TEXT NOT NULL,
+                        `domain` TEXT NOT NULL,
+                        `isAnonymous` INTEGER NOT NULL,
+                        `lastShare` TEXT,
+                        `lastPath` TEXT,
+                        `addedTimestamp` INTEGER NOT NULL,
+                        PRIMARY KEY(`id`)
+                    )
+                    """.trimIndent()
+                )
+            }
+        }
+
         fun getInstance(context: Context): AppDatabase {
             return INSTANCE ?: synchronized(this) {
                 val instance = Room.databaseBuilder(
@@ -60,7 +87,8 @@ abstract class AppDatabase : RoomDatabase() {
                     AppDatabase::class.java,
                     "cinelocal.db"
                 )
-                    .addMigrations(MIGRATION_1_2)
+                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
+                    .fallbackToDestructiveMigrationOnDowngrade()
                     .build()
                 INSTANCE = instance
                 instance
@@ -68,3 +96,4 @@ abstract class AppDatabase : RoomDatabase() {
         }
     }
 }
+

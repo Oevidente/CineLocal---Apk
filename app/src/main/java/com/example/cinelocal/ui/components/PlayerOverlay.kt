@@ -64,6 +64,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.material.icons.filled.Audiotrack
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Refresh
@@ -88,11 +89,13 @@ import com.example.cinelocal.ui.theme.DarkSurfaceVariant
 import com.example.cinelocal.ui.theme.TextPrimary
 import com.example.cinelocal.ui.theme.TextSecondary
 import kotlinx.coroutines.delay
+import java.io.File
 
 @Composable
 fun PlayerOverlay(
     uiState: PlayerUiState,
     castState: CastState,
+    openSubtitlesApiKey: String = "",
     onBackClick: () -> Unit,
     onPlayPauseClick: () -> Unit,
     onSeekBack: () -> Unit,
@@ -102,6 +105,9 @@ fun PlayerOverlay(
     onResizeModeCycle: () -> Unit,
     onSelectAudioTrack: (Int) -> Unit,
     onSelectSubtitleTrack: (Int) -> Unit,
+    onApplyExternalSubtitle: (file: File, vttContent: String, label: String) -> Unit = { _, _, _ -> },
+    onDisableSubtitles: () -> Unit = {},
+    onOpenSettingsForApiKey: () -> Unit = {},
     onNextEpisodeClick: () -> Unit,
     onCastClick: () -> Unit,
     onRetryClick: () -> Unit = {},
@@ -109,7 +115,8 @@ fun PlayerOverlay(
 ) {
     var areControlsVisible by remember { mutableStateOf(true) }
     var showSpeedMenu by remember { mutableStateOf(false) }
-    var showTracksDialog by remember { mutableStateOf(false) }
+    var showAudioDialog by remember { mutableStateOf(false) }
+    var showSubtitleDialog by remember { mutableStateOf(false) }
     var showDetailsDialog by remember { mutableStateOf(false) }
 
     var isUserSeeking by remember { mutableStateOf(false) }
@@ -429,15 +436,24 @@ fun PlayerOverlay(
                             }
                         }
 
-                        // Audio & Subtitles button
-                        if (uiState.availableAudioTracks.isNotEmpty() || uiState.availableSubtitleTracks.isNotEmpty()) {
-                            IconButton(onClick = { showTracksDialog = true }) {
+                        // Audio Tracks button
+                        if (uiState.availableAudioTracks.isNotEmpty()) {
+                            IconButton(onClick = { showAudioDialog = true }) {
                                 Icon(
-                                    imageVector = Icons.Default.ClosedCaption,
-                                    contentDescription = "Áudio e Legendas",
+                                    imageVector = Icons.Default.Audiotrack,
+                                    contentDescription = "Faixas de Áudio",
                                     tint = Color.White
                                 )
                             }
+                        }
+
+                        // Subtitles button (OpenSubtitles & Embedded)
+                        IconButton(onClick = { showSubtitleDialog = true }) {
+                            Icon(
+                                imageVector = Icons.Default.ClosedCaption,
+                                contentDescription = "Legendas e OpenSubtitles",
+                                tint = if (uiState.selectedSubtitleIndex >= 0 || uiState.activeExternalSubtitleLabel != null) AccentGold else Color.White
+                            )
                         }
                     }
                 }
@@ -625,28 +641,38 @@ fun PlayerOverlay(
         }
     }
 
-    // Audio & Subtitles Dialog
-    if (showTracksDialog) {
-        TracksSelectionDialog(
+    // Audio Tracks Dialog
+    if (showAudioDialog) {
+        AudioTracksSelectionDialog(
             audioTracks = uiState.availableAudioTracks,
-            subtitleTracks = uiState.availableSubtitleTracks,
             selectedAudio = uiState.selectedAudioIndex,
-            selectedSub = uiState.selectedSubtitleIndex,
             onSelectAudio = onSelectAudioTrack,
-            onSelectSubtitle = onSelectSubtitleTrack,
-            onDismiss = { showTracksDialog = false }
+            onDismiss = { showAudioDialog = false }
+        )
+    }
+
+    // Subtitles & OpenSubtitles Dialog
+    if (showSubtitleDialog) {
+        SubtitleSelectionDialog(
+            mediaTitle = uiState.title,
+            openSubtitlesApiKey = openSubtitlesApiKey,
+            availableSubtitleTracks = uiState.availableSubtitleTracks,
+            selectedSubtitleIndex = uiState.selectedSubtitleIndex,
+            activeExternalSubtitleLabel = uiState.activeExternalSubtitleLabel,
+            onSelectEmbeddedTrack = onSelectSubtitleTrack,
+            onApplyExternalSubtitle = onApplyExternalSubtitle,
+            onDisableSubtitles = onDisableSubtitles,
+            onOpenSettingsForApiKey = onOpenSettingsForApiKey,
+            onDismiss = { showSubtitleDialog = false }
         )
     }
 }
 
 @Composable
-fun TracksSelectionDialog(
+fun AudioTracksSelectionDialog(
     audioTracks: List<com.example.cinelocal.data.model.TrackInfo>,
-    subtitleTracks: List<com.example.cinelocal.data.model.TrackInfo>,
     selectedAudio: Int,
-    selectedSub: Int,
     onSelectAudio: (Int) -> Unit,
-    onSelectSubtitle: (Int) -> Unit,
     onDismiss: () -> Unit
 ) {
     AlertDialog(
@@ -656,83 +682,24 @@ fun TracksSelectionDialog(
         textContentColor = TextSecondary,
         title = {
             Text(
-                text = "Áudio e Legendas",
+                text = "Faixas de Áudio",
                 style = MaterialTheme.typography.titleLarge,
                 fontWeight = FontWeight.Bold
             )
         },
         text = {
             LazyColumn(modifier = Modifier.fillMaxWidth()) {
-                if (audioTracks.isNotEmpty()) {
-                    item {
-                        Text(
-                            text = "Idioma do Áudio",
-                            style = MaterialTheme.typography.titleMedium,
-                            color = CineRed,
-                            fontWeight = FontWeight.Bold,
-                            modifier = Modifier.padding(vertical = 6.dp)
-                        )
-                    }
-
-                    items(audioTracks) { track ->
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clickable { onSelectAudio(track.index) }
-                                .padding(vertical = 4.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            RadioButton(
-                                selected = track.isSelected || (selectedAudio == track.index),
-                                onClick = { onSelectAudio(track.index) },
-                                colors = RadioButtonDefaults.colors(selectedColor = CineRed)
-                            )
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text(text = track.label, color = TextPrimary)
-                        }
-                    }
-                }
-
-                item {
-                    Spacer(modifier = Modifier.height(12.dp))
-                    Text(
-                        text = "Legendas (Compatíveis com TV & Chromecast)",
-                        style = MaterialTheme.typography.titleMedium,
-                        color = CineRed,
-                        fontWeight = FontWeight.Bold,
-                        modifier = Modifier.padding(vertical = 6.dp)
-                    )
-                }
-
-                item {
+                items(audioTracks) { track ->
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .clickable { onSelectSubtitle(-1) }
+                            .clickable { onSelectAudio(track.index) }
                             .padding(vertical = 4.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         RadioButton(
-                            selected = selectedSub == -1,
-                            onClick = { onSelectSubtitle(-1) },
-                            colors = RadioButtonDefaults.colors(selectedColor = CineRed)
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(text = "Desativadas", color = TextPrimary)
-                    }
-                }
-
-                items(subtitleTracks) { track ->
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable { onSelectSubtitle(track.index) }
-                            .padding(vertical = 4.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        RadioButton(
-                            selected = track.isSelected || (selectedSub == track.index),
-                            onClick = { onSelectSubtitle(track.index) },
+                            selected = track.isSelected || (selectedAudio == track.index),
+                            onClick = { onSelectAudio(track.index) },
                             colors = RadioButtonDefaults.colors(selectedColor = CineRed)
                         )
                         Spacer(modifier = Modifier.width(8.dp))

@@ -16,11 +16,13 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ChevronRight
+import androidx.compose.material.icons.filled.Computer
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Movie
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Speed
+import androidx.compose.material.icons.filled.Subtitles
 import androidx.compose.material.icons.filled.Tv
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -53,10 +55,13 @@ import com.example.cinelocal.ui.theme.TextSecondary
 @Composable
 fun SettingsScreen(
     tmdbApiKey: String,
+    openSubtitlesApiKey: String = "",
     totalMediaCount: Int,
     totalChannelCount: Int,
     onOpenTmdbConfig: () -> Unit,
+    onOpenOpenSubtitlesConfig: () -> Unit = {},
     onOpenIptvManager: () -> Unit,
+    onOpenPcNetwork: () -> Unit = {},
     onRescanLibrary: () -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -91,6 +96,18 @@ fun SettingsScreen(
         }
 
         item {
+            SettingsItemCard(
+                icon = Icons.Default.Subtitles,
+                title = "OpenSubtitles.com v1",
+                subtitle = if (openSubtitlesApiKey.isNotBlank()) "Configurado (Busca e download ativos)" else "Chave não configurada (Busca online desativada)",
+                badge = if (openSubtitlesApiKey.isNotBlank()) "ATIVO" else null,
+                badgeColor = if (openSubtitlesApiKey.isNotBlank()) Color(0xFF4CAF50) else null,
+                onClick = onOpenOpenSubtitlesConfig,
+                testTag = "settings_opensubtitles_item"
+            )
+        }
+
+        item {
             Text(
                 text = "TV Ao Vivo & Transmissões",
                 style = MaterialTheme.typography.titleMedium,
@@ -115,6 +132,18 @@ fun SettingsScreen(
                 style = MaterialTheme.typography.titleMedium,
                 color = CineRed,
                 fontWeight = FontWeight.Bold
+            )
+        }
+
+        item {
+            SettingsItemCard(
+                icon = Icons.Default.Computer,
+                title = "Armazenamento no Computador (PC / SMB)",
+                subtitle = "Conecte seu PC para explorar e assistir pastas pela rede Wi-Fi",
+                badge = "NOVO",
+                badgeColor = Color(0xFF38BDF8),
+                onClick = onOpenPcNetwork,
+                testTag = "settings_pc_network_item"
             )
         }
 

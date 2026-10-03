@@ -18,6 +18,9 @@ import java.io.BufferedReader
 import java.io.InputStreamReader
 import java.net.HttpURLConnection
 import java.net.URL
+import android.provider.OpenableColumns
+import com.example.cinelocal.data.scanner.FolderScanner
+import com.example.cinelocal.data.scanner.MediaNameParser
 import java.util.UUID
 
 class MediaRepository(
@@ -30,7 +33,9 @@ class MediaRepository(
     private val episodeDao = database.episodeDao()
     private val iptvChannelDao = database.iptvChannelDao()
     private val settingDao = database.settingDao()
+    private val networkServerDao = database.networkServerDao()
 
+    val allNetworkServers: Flow<List<com.example.cinelocal.data.model.NetworkServerEntity>> = networkServerDao.getAllServers()
     val allMedia: Flow<List<MediaItemEntity>> = mediaDao.getAllMedia()
     val allMediaWithEpisodes: Flow<List<MediaWithEpisodes>> = mediaDao.getAllMediaWithEpisodes()
     val allChannels: Flow<List<IptvChannelEntity>> = iptvChannelDao.getAllChannels()
@@ -85,8 +90,104 @@ class MediaRepository(
         mediaDao.deleteMediaById(id.toString())
     }
 
+    suspend fun saveNetworkServer(server: com.example.cinelocal.data.model.NetworkServerEntity) {
+        networkServerDao.insertServer(server)
+    }
+
+    suspend fun deleteNetworkServer(server: com.example.cinelocal.data.model.NetworkServerEntity) {
+        networkServerDao.deleteServer(server)
+    }
+
+    suspend fun insertMediaWithEpisodes(media: MediaItemEntity, episodes: List<EpisodeEntity>) {
+        mediaDao.insertMedia(media)
+        episodes.forEach { episodeDao.insertEpisode(it) }
+    }
+
+    suspend fun importSmbFolder(
+        config: com.example.cinelocal.data.smb.SmbConnectionConfig,
+        shareName: String,
+        dirPath: String
+    ): Int = withContext(Dispatchers.IO) {
+        com.example.cinelocal.data.scanner.SmbFolderScanner.scanAndImportFolder(
+            repository = this@MediaRepository,
+            config = config,
+            shareName = shareName,
+            directoryPath = dirPath
+        )
+    }
+
     suspend fun deleteChannel(id: String) {
         iptvChannelDao.deleteChannelById(id)
+    }
+
+    suspend fun addStandaloneVideoFiles(uris: List<Uri>, context: Context): List<MediaItemEntity> = withContext(Dispatchers.IO) {
+        val cr = context.contentResolver
+        val addedItems = mutableListOf<MediaItemEntity>()
+
+        for (uri in uris) {
+            var displayName = "video"
+            try {
+                cr.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)?.use { cursor ->
+                    if (cursor.moveToFirst()) {
+                        val nameIdx = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
+                        if (nameIdx != -1) displayName = cursor.getString(nameIdx) ?: "video"
+                    }
+                }
+            } catch (_: Exception) {}
+
+            val parsed = MediaNameParser.parse(displayName)
+            val mediaId = UUID.randomUUID().toString()
+
+            if (parsed.isSeries) {
+                val existingList = mediaDao.getAllMediaList()
+                val existingSeries = existingList.find { it.kind == MediaKind.SERIES && it.title.equals(parsed.title, ignoreCase = true) }
+                val targetMediaId = existingSeries?.id ?: mediaId
+
+                val seriesItem = if (existingSeries == null) {
+                    val s = MediaItemEntity(
+                        id = targetMediaId,
+                        title = parsed.title,
+                        kind = MediaKind.SERIES,
+                        year = parsed.year,
+                        overview = "Série importada de arquivo local.",
+                        uriString = uri.toString()
+                    )
+                    mediaDao.insertMedia(s)
+                    s
+                } else existingSeries
+                addedItems.add(seriesItem)
+
+                val ep = EpisodeEntity(
+                    mediaId = targetMediaId,
+                    seasonNumber = parsed.seasonNumber,
+                    episodeNumber = parsed.episodeNumber,
+                    title = "Episódio ${parsed.episodeNumber}",
+                    uriString = uri.toString()
+                )
+                episodeDao.insertEpisode(ep)
+            } else {
+                val movieItem = MediaItemEntity(
+                    id = mediaId,
+                    title = parsed.title,
+                    kind = MediaKind.MOVIE,
+                    year = parsed.year,
+                    overview = "Filme importado de arquivo local ($displayName).",
+                    uriString = uri.toString()
+                )
+                mediaDao.insertMedia(movieItem)
+
+                val ep = EpisodeEntity(
+                    mediaId = mediaId,
+                    seasonNumber = 0,
+                    episodeNumber = 1,
+                    title = parsed.title,
+                    uriString = uri.toString()
+                )
+                episodeDao.insertEpisode(ep)
+                addedItems.add(movieItem)
+            }
+        }
+        addedItems
     }
 
     suspend fun addFolderByUri(uri: Uri, customTitle: String? = null): MediaItemEntity = withContext(Dispatchers.IO) {
@@ -94,12 +195,70 @@ class MediaRepository(
             !customTitle.isNullOrBlank() -> customTitle
             else -> uri.lastPathSegment?.substringAfterLast(':')?.substringAfterLast('/') ?: "Pasta Local"
         }
+
+        // Se o context estiver disponível, escaneia os vídeos reais da pasta
+        var scannedCount = 0
+        if (context != null) {
+            val scanned = FolderScanner.scanTree(context.contentResolver, uri)
+            scannedCount = scanned.size
+            for (file in scanned) {
+                val parsed = MediaNameParser.parse(file.displayName, file.parentFolder)
+                val mediaId = UUID.randomUUID().toString()
+
+                if (parsed.isSeries) {
+                    val existing = mediaDao.getAllMediaList().find { it.kind == MediaKind.SERIES && it.title.equals(parsed.title, ignoreCase = true) }
+                    val targetMediaId = existing?.id ?: mediaId
+                    if (existing == null) {
+                        mediaDao.insertMedia(
+                            MediaItemEntity(
+                                id = targetMediaId,
+                                title = parsed.title,
+                                kind = MediaKind.SERIES,
+                                year = parsed.year,
+                                overview = "Série da pasta ${file.parentFolder ?: folderName}",
+                                uriString = file.uri.toString()
+                            )
+                        )
+                    }
+                    episodeDao.insertEpisode(
+                        EpisodeEntity(
+                            mediaId = targetMediaId,
+                            seasonNumber = parsed.seasonNumber,
+                            episodeNumber = parsed.episodeNumber,
+                            title = "Episódio ${parsed.episodeNumber} - ${file.displayName.substringBeforeLast('.')}",
+                            uriString = file.uri.toString()
+                        )
+                    )
+                } else {
+                    mediaDao.insertMedia(
+                        MediaItemEntity(
+                            id = mediaId,
+                            title = parsed.title,
+                            kind = MediaKind.MOVIE,
+                            year = parsed.year,
+                            overview = "Filme da pasta $folderName.",
+                            uriString = file.uri.toString()
+                        )
+                    )
+                    episodeDao.insertEpisode(
+                        EpisodeEntity(
+                            mediaId = mediaId,
+                            seasonNumber = 0,
+                            episodeNumber = 1,
+                            title = parsed.title,
+                            uriString = file.uri.toString()
+                        )
+                    )
+                }
+            }
+        }
+
         val mediaId = UUID.randomUUID().toString()
         val mediaItem = MediaItemEntity(
             id = mediaId,
             title = folderName,
             kind = MediaKind.MOVIE,
-            overview = "Conteúdo importado da pasta do dispositivo.",
+            overview = "Pasta adicionada ($scannedCount vídeos encontrados).",
             uriString = uri.toString(),
             filePath = uri.path
         )

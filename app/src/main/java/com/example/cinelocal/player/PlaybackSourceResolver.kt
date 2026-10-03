@@ -129,14 +129,23 @@ object PlaybackSourceResolver {
     }
 
     private fun inferMimeType(url: String): String? {
-        val cleanUrl = url.substringBefore('?').lowercase()
+        val lowerUrl = url.lowercase()
+        val fileParam = if (url.contains("f=")) {
+            url.substringAfter("f=").substringBefore('&').lowercase()
+        } else ""
+        val cleanUrl = lowerUrl.substringBefore('?')
+
         return when {
-            cleanUrl.endsWith(".m3u8") || url.contains(".m3u8", ignoreCase = true) -> MimeTypes.APPLICATION_M3U8
-            cleanUrl.endsWith(".mpd") || url.contains(".mpd", ignoreCase = true) -> MimeTypes.APPLICATION_MPD
-            cleanUrl.endsWith(".mp4") || cleanUrl.endsWith(".m4v") -> MimeTypes.VIDEO_MP4
-            cleanUrl.endsWith(".mkv") -> MimeTypes.VIDEO_MATROSKA
-            cleanUrl.endsWith(".webm") -> MimeTypes.VIDEO_WEBM
+            cleanUrl.endsWith(".m3u8") || lowerUrl.contains(".m3u8") -> MimeTypes.APPLICATION_M3U8
+            cleanUrl.endsWith(".mpd") || lowerUrl.contains(".mpd") -> MimeTypes.APPLICATION_MPD
+            cleanUrl.endsWith(".mp4") || cleanUrl.endsWith(".m4v") || fileParam.endsWith(".mp4") || fileParam.endsWith(".m4v") -> MimeTypes.VIDEO_MP4
+            cleanUrl.endsWith(".mkv") || fileParam.endsWith(".mkv") -> MimeTypes.VIDEO_MATROSKA
+            cleanUrl.endsWith(".webm") || fileParam.endsWith(".webm") -> MimeTypes.VIDEO_WEBM
+            cleanUrl.endsWith(".avi") || fileParam.endsWith(".avi") -> "video/x-msvideo"
+            cleanUrl.endsWith(".mov") || fileParam.endsWith(".mov") -> "video/quicktime"
+            cleanUrl.endsWith(".ts") || fileParam.endsWith(".ts") -> "video/mp2t"
             else -> null
         }
     }
 }
+

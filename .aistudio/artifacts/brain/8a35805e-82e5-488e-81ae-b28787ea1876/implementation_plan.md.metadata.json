@@ -1,6 +1,6 @@
 {
-  "summary":  "Revised implementation plan emphasizing the complete implementation of magnet torrent addition, TorrentUtils parsing, HTTP/WebTorrent streaming bridge, and seamless paste & play torrent playback in CineLocal.",
-  "updatedAt":  "2026-10-02T23:15:39.590833808Z",
+  "summary":  "Plano arquitetural e de implementação para conexão com PC via rede local (SMB), descoberta automática na Wi-Fi, navegador de pastas remotas, streaming HTTP proxy e catalogação na biblioteca do CineLocal.",
+  "updatedAt":  "2026-10-03T16:33:30.243418022Z",
   "requestFeedback":  true,
   "userFacing":  true
 }

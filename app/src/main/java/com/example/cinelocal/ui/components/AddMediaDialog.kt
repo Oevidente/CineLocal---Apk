@@ -4,6 +4,7 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -15,6 +16,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Computer
 import androidx.compose.material.icons.filled.ContentPaste
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Folder
@@ -61,10 +63,15 @@ import com.example.cinelocal.ui.theme.DarkSurfaceVariant
 import com.example.cinelocal.ui.theme.TextPrimary
 import com.example.cinelocal.ui.theme.TextSecondary
 
+import androidx.compose.material.icons.filled.Movie
+import androidx.compose.material.icons.filled.VideoFile
+
 @Composable
 fun AddMediaDialog(
     onDismiss: () -> Unit,
+    onPickFilesClick: () -> Unit = {},
     onPickFolderClick: () -> Unit,
+    onOpenPcNetworkClick: () -> Unit = {},
     onAddDirectStream: (title: String, url: String, isSeries: Boolean) -> Unit,
     onAddTorrentStream: (magnetUri: String, customTitle: String, isSeries: Boolean) -> Unit = { _, _, _ -> }
 ) {
@@ -114,7 +121,7 @@ fun AddMediaDialog(
                     Tab(
                         selected = selectedTab == 0,
                         onClick = { selectedTab = 0 },
-                        text = { Text("Pasta Local", fontWeight = FontWeight.Bold, fontSize = 12.sp) },
+                        text = { Text("Mídia Local", fontWeight = FontWeight.Bold, fontSize = 12.sp) },
                         selectedContentColor = CineRed,
                         unselectedContentColor = TextSecondary
                     )
@@ -139,13 +146,65 @@ fun AddMediaDialog(
                 when (selectedTab) {
                     0 -> {
                         Text(
-                            text = "Selecione uma pasta com arquivos de vídeo (.mp4, .mkv, .avi) do seu armazenamento local, pendrive ou cartão SD.",
+                            text = "Importe seus vídeos locais para a biblioteca organizada:",
                             style = MaterialTheme.typography.bodyMedium,
                             color = TextSecondary
                         )
 
-                        Spacer(modifier = Modifier.height(16.dp))
+                        Spacer(modifier = Modifier.height(14.dp))
 
+                        // Opção 1: Selecionar Arquivos de Vídeo
+                        Card(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable {
+                                    onDismiss()
+                                    onPickFilesClick()
+                                }
+                                .testTag("pick_files_action"),
+                            colors = CardDefaults.cardColors(containerColor = DarkSurfaceVariant),
+                            shape = RoundedCornerShape(10.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(16.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Surface(
+                                    color = CineRed.copy(alpha = 0.15f),
+                                    shape = RoundedCornerShape(8.dp),
+                                    modifier = Modifier.size(44.dp)
+                                ) {
+                                    Box(contentAlignment = Alignment.Center) {
+                                        Icon(
+                                            imageVector = Icons.Default.Movie,
+                                            contentDescription = null,
+                                            tint = CineRed,
+                                            modifier = Modifier.size(24.dp)
+                                        )
+                                    }
+                                }
+                                Spacer(modifier = Modifier.width(14.dp))
+                                Column {
+                                    Text(
+                                        text = "Selecionar Vídeo(s)",
+                                        style = MaterialTheme.typography.titleMedium,
+                                        color = TextPrimary,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                    Text(
+                                        text = "Escolha 1 ou mais arquivos (.mp4, .mkv, .avi)",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = TextSecondary
+                                    )
+                                }
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(10.dp))
+
+                        // Opção 2: Selecionar Pasta Local
                         Card(
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -155,28 +214,93 @@ fun AddMediaDialog(
                                 }
                                 .testTag("pick_folder_action"),
                             colors = CardDefaults.cardColors(containerColor = DarkSurfaceVariant),
-                            shape = RoundedCornerShape(8.dp)
+                            shape = RoundedCornerShape(10.dp)
                         ) {
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .padding(16.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.Center
+                                verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Icon(
-                                    imageVector = Icons.Default.Folder,
-                                    contentDescription = null,
-                                    tint = CineRed,
-                                    modifier = Modifier.size(28.dp)
-                                )
-                                Spacer(modifier = Modifier.width(12.dp))
-                                Text(
-                                    text = "Abrir Explorador de Arquivos",
-                                    style = MaterialTheme.typography.titleMedium,
-                                    color = TextPrimary,
-                                    fontWeight = FontWeight.Bold
-                                )
+                                Surface(
+                                    color = Color(0xFF2563EB).copy(alpha = 0.15f),
+                                    shape = RoundedCornerShape(8.dp),
+                                    modifier = Modifier.size(44.dp)
+                                ) {
+                                    Box(contentAlignment = Alignment.Center) {
+                                        Icon(
+                                            imageVector = Icons.Default.Folder,
+                                            contentDescription = null,
+                                            tint = Color(0xFF38BDF8),
+                                            modifier = Modifier.size(24.dp)
+                                        )
+                                    }
+                                }
+                                Spacer(modifier = Modifier.width(14.dp))
+                                Column {
+                                    Text(
+                                        text = "Selecionar Pasta Local",
+                                        style = MaterialTheme.typography.titleMedium,
+                                        color = TextPrimary,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                    Text(
+                                        text = "Escaneie pasta da memória interna ou pendrive OTG",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = TextSecondary
+                                    )
+                                }
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(10.dp))
+
+                        // Opção 3: Conectar com Computador (PC / Rede Wi-Fi SMB)
+                        Card(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable {
+                                    onDismiss()
+                                    onOpenPcNetworkClick()
+                                }
+                                .testTag("open_pc_network_action"),
+                            colors = CardDefaults.cardColors(containerColor = DarkSurfaceVariant),
+                            shape = RoundedCornerShape(10.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(16.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Surface(
+                                    color = Color(0xFF10B981).copy(alpha = 0.15f),
+                                    shape = RoundedCornerShape(8.dp),
+                                    modifier = Modifier.size(44.dp)
+                                ) {
+                                    Box(contentAlignment = Alignment.Center) {
+                                        Icon(
+                                            imageVector = Icons.Default.Computer,
+                                            contentDescription = null,
+                                            tint = Color(0xFF34D399),
+                                            modifier = Modifier.size(24.dp)
+                                        )
+                                    }
+                                }
+                                Spacer(modifier = Modifier.width(14.dp))
+                                Column {
+                                    Text(
+                                        text = "Computador (PC / Rede Wi-Fi)",
+                                        style = MaterialTheme.typography.titleMedium,
+                                        color = TextPrimary,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                    Text(
+                                        text = "Acesse e reproduza pastas compartilhadas do PC (SMB)",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = TextSecondary
+                                    )
+                                }
                             }
                         }
                     }
