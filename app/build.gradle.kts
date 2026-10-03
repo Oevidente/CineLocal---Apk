@@ -14,10 +14,30 @@ android {
         applicationId = "com.aistudio.cinelocal.qkwrpt"
         minSdk = 26
         targetSdk = 35
-        versionCode = 3
+
+        val runNumber = System.getenv("GITHUB_RUN_NUMBER")?.toIntOrNull()
+        val sha = System.getenv("GITHUB_SHA")?.take(7) ?: "local"
+
+        // versionCode sempre cresce no CI; builds locais ficam em 3
+        versionCode = if (runNumber != null) 100 + runNumber else 3
         versionName = "1.2.0"
 
+        buildConfigField("String", "GIT_SHA", "\"$sha\"")
+        buildConfigField("int", "BUILD_NUMBER", "${runNumber ?: 0}")
+
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+    }
+
+    signingConfigs {
+        create("ci") {
+            val ksPath = System.getenv("KEYSTORE_PATH")
+            if (ksPath != null) {
+                storeFile = file(ksPath)
+                storePassword = System.getenv("KEYSTORE_PASSWORD")
+                keyAlias = System.getenv("KEY_ALIAS")
+                keyPassword = System.getenv("KEY_PASSWORD")
+            }
+        }
     }
 
     buildTypes {
@@ -29,7 +49,10 @@ android {
             )
         }
         debug {
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfig = if (System.getenv("KEYSTORE_PATH") != null)
+                signingConfigs.getByName("ci")
+            else
+                signingConfigs.getByName("debug")
         }
     }
     compileOptions {
@@ -41,6 +64,7 @@ android {
     }
     buildFeatures {
         compose = true
+        buildConfig = true
     }
 }
 

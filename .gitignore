@@ -1,14 +1,25 @@
-node_modules/
+# Build / Gradle
 build/
-dist/
-.cache/
-coverage/
-.DS_Store
-*.log
+.gradle/
+local.properties
+.idea/
+*.iml
+captures/
+.externalNativeBuild/
+.cxx/
+
+# Segredos
 .env*
 !.env.example
-certs/
-data/library.json
-data/library.json
-data/metadata
-data 
+*.jks
+*.keystore
+
+# APKs são distribuídos pelo GitHub Releases, não pelo repositório
+apk/
+dist/
+*.apk
+
+# Diversos
+.DS_Store
+*.log
+node_modules/

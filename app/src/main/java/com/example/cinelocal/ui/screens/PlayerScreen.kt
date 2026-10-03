@@ -4,6 +4,8 @@ import android.app.Activity
 import android.view.ViewGroup
 import android.view.WindowManager
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.annotation.OptIn
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
@@ -38,6 +40,28 @@ fun PlayerScreen(
     val castState by playerViewModel.castState.collectAsStateWithLifecycle()
 
     var showCastDialog by remember { mutableStateOf(false) }
+
+    val castPermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestMultiplePermissions()
+    ) {
+        playerViewModel.castManager.startDiscovery()
+        showCastDialog = true
+    }
+
+    fun openCastWithPermissions() {
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+            castPermissionLauncher.launch(
+                arrayOf(android.Manifest.permission.NEARBY_WIFI_DEVICES)
+            )
+        } else {
+            castPermissionLauncher.launch(
+                arrayOf(
+                    android.Manifest.permission.ACCESS_FINE_LOCATION,
+                    android.Manifest.permission.ACCESS_COARSE_LOCATION
+                )
+            )
+        }
+    }
 
     BackHandler {
         onBackClick()
@@ -96,8 +120,7 @@ fun PlayerScreen(
             onSelectSubtitleTrack = { idx -> playerViewModel.selectSubtitleTrack(idx) },
             onNextEpisodeClick = { playerViewModel.playNextEpisode() },
             onCastClick = {
-                playerViewModel.castManager.startDiscovery()
-                showCastDialog = true
+                openCastWithPermissions()
             },
             modifier = Modifier.fillMaxSize()
         )

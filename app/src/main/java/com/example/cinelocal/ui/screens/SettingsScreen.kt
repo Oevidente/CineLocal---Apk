@@ -43,6 +43,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.cinelocal.BuildConfig
 import com.example.cinelocal.ui.theme.AccentGold
 import com.example.cinelocal.ui.theme.CineRed
 import com.example.cinelocal.ui.theme.DarkSurface
@@ -218,13 +219,21 @@ fun SettingsScreen(
                     Spacer(modifier = Modifier.width(14.dp))
                     Column {
                         Text(
-                            text = "CineLocal v1.0.0",
+                            text = "CineLocal v${BuildConfig.VERSION_NAME}",
                             style = MaterialTheme.typography.titleSmall,
                             color = TextPrimary,
                             fontWeight = FontWeight.Bold
                         )
                         Text(
-                            text = "Central de mídia offline nativa para Android com suporte a ExoPlayer Media3, IPTV M3U e TheMovieDB.",
+                            text = "Build #${BuildConfig.BUILD_NUMBER} (${BuildConfig.GIT_SHA})",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = AccentGold,
+                            fontWeight = FontWeight.SemiBold,
+                            fontSize = 11.sp
+                        )
+                        Spacer(modifier = Modifier.height(2.dp))
+                        Text(
+                            text = "Central de mídia offline nativa para Android com suporte a ExoPlayer Media3, Google Cast, IPTV M3U e TheMovieDB.",
                             style = MaterialTheme.typography.bodySmall,
                             color = TextSecondary,
                             fontSize = 11.sp

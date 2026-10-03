@@ -180,6 +180,29 @@ fun CineLocalApp(
         }
     }
 
+    // Cast Discovery Permissions Launcher (Android 13+ / Legacy)
+    val castPermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestMultiplePermissions()
+    ) {
+        playerViewModel.castManager.startDiscovery()
+        showCastDialog = true
+    }
+
+    fun openCastWithPermissions() {
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+            castPermissionLauncher.launch(
+                arrayOf(android.Manifest.permission.NEARBY_WIFI_DEVICES)
+            )
+        } else {
+            castPermissionLauncher.launch(
+                arrayOf(
+                    android.Manifest.permission.ACCESS_FINE_LOCATION,
+                    android.Manifest.permission.ACCESS_COARSE_LOCATION
+                )
+            )
+        }
+    }
+
     // View Model Observables
     val allMedia by mainViewModel.allMedia.collectAsStateWithLifecycle()
     val movies by mainViewModel.movies.collectAsStateWithLifecycle()
@@ -269,8 +292,7 @@ fun CineLocalApp(
                                     CastButton(
                                         castState = castState,
                                         onClick = {
-                                            playerViewModel.castManager.startDiscovery()
-                                            showCastDialog = true
+                                            openCastWithPermissions()
                                         }
                                     )
 
