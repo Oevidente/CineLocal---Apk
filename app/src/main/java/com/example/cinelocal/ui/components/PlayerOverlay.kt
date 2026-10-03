@@ -64,6 +64,19 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.material.icons.filled.ContentCopy
+import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.font.FontFamily
+import android.widget.Toast
 import com.example.cinelocal.data.model.TrackInfo
 import com.example.cinelocal.cast.CastState
 import com.example.cinelocal.player.PlayerUiState
@@ -91,11 +104,13 @@ fun PlayerOverlay(
     onSelectSubtitleTrack: (Int) -> Unit,
     onNextEpisodeClick: () -> Unit,
     onCastClick: () -> Unit,
+    onRetryClick: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     var areControlsVisible by remember { mutableStateOf(true) }
     var showSpeedMenu by remember { mutableStateOf(false) }
     var showTracksDialog by remember { mutableStateOf(false) }
+    var showDetailsDialog by remember { mutableStateOf(false) }
 
     var isUserSeeking by remember { mutableStateOf(false) }
     var sliderValue by remember { mutableFloatStateOf(0f) }
@@ -173,32 +188,127 @@ fun PlayerOverlay(
 
         // Error message overlay
         uiState.errorMessage?.let { errorMsg ->
+            val context = LocalContext.current
+            val clipboardManager = LocalClipboardManager.current
+            val detailsText = uiState.errorDetails ?: errorMsg
+
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .background(Color.Black.copy(alpha = 0.85f))
+                    .background(Color.Black.copy(alpha = 0.90f))
                     .padding(24.dp),
                 contentAlignment = Alignment.Center
             ) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    modifier = Modifier.fillMaxWidth(0.9f)
+                ) {
                     Text(
-                        text = "Aviso de Reprodução",
+                        text = "Erro na Reprodução",
                         style = MaterialTheme.typography.titleLarge,
                         color = CineRed,
                         fontWeight = FontWeight.Bold
                     )
-                    Spacer(modifier = Modifier.height(8.dp))
+                    Spacer(modifier = Modifier.height(12.dp))
                     Text(
                         text = errorMsg,
                         style = MaterialTheme.typography.bodyMedium,
-                        color = TextPrimary
+                        color = TextPrimary,
+                        modifier = Modifier.padding(horizontal = 8.dp)
                     )
-                    Spacer(modifier = Modifier.height(16.dp))
-                    TextButton(onClick = onBackClick) {
-                        Text("Voltar", color = Color.White)
+                    Spacer(modifier = Modifier.height(20.dp))
+
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        if (uiState.canRetry) {
+                            Button(
+                                onClick = onRetryClick,
+                                colors = ButtonDefaults.buttonColors(containerColor = CineRed)
+                            ) {
+                                Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(18.dp))
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text("Tentar de novo")
+                            }
+                        }
+
+                        OutlinedButton(
+                            onClick = { showDetailsDialog = true }
+                        ) {
+                            Icon(Icons.Default.Info, contentDescription = null, modifier = Modifier.size(18.dp), tint = TextPrimary)
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("Detalhes", color = TextPrimary)
+                        }
+
+                        OutlinedButton(
+                            onClick = {
+                                clipboardManager.setText(AnnotatedString(detailsText))
+                                Toast.makeText(context, "Detalhes copiados!", Toast.LENGTH_SHORT).show()
+                            }
+                        ) {
+                            Icon(Icons.Default.ContentCopy, contentDescription = null, modifier = Modifier.size(18.dp), tint = TextPrimary)
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("Copiar", color = TextPrimary)
+                        }
+
+                        TextButton(onClick = onBackClick) {
+                            Text("Voltar", color = Color.White)
+                        }
                     }
                 }
             }
+        }
+
+        if (showDetailsDialog) {
+            val context = LocalContext.current
+            val clipboardManager = LocalClipboardManager.current
+            val detailsText = uiState.errorDetails ?: (uiState.errorMessage ?: "Sem detalhes")
+
+            AlertDialog(
+                onDismissRequest = { showDetailsDialog = false },
+                title = { Text("Detalhes Técnicos", color = Color.White, fontWeight = FontWeight.Bold) },
+                text = {
+                    Surface(
+                        color = DarkSurface,
+                        shape = RoundedCornerShape(8.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(260.dp)
+                    ) {
+                        Column(
+                            modifier = Modifier
+                                .padding(12.dp)
+                                .verticalScroll(rememberScrollState())
+                        ) {
+                            Text(
+                                text = detailsText,
+                                style = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace),
+                                color = TextSecondary
+                            )
+                        }
+                    }
+                },
+                confirmButton = {
+                    Button(
+                        onClick = { showDetailsDialog = false },
+                        colors = ButtonDefaults.buttonColors(containerColor = CineRed)
+                    ) {
+                        Text("Fechar")
+                    }
+                },
+                dismissButton = {
+                    OutlinedButton(
+                        onClick = {
+                            clipboardManager.setText(AnnotatedString(detailsText))
+                            Toast.makeText(context, "Detalhes copiados!", Toast.LENGTH_SHORT).show()
+                        }
+                    ) {
+                        Text("Copiar Detalhes", color = TextPrimary)
+                    }
+                },
+                containerColor = DarkBackground
+            )
         }
 
         // Animated Controls Overlay

@@ -122,6 +122,7 @@ fun PlayerScreen(
             onCastClick = {
                 openCastWithPermissions()
             },
+            onRetryClick = { playerViewModel.retryPlayback() },
             modifier = Modifier.fillMaxSize()
         )
 

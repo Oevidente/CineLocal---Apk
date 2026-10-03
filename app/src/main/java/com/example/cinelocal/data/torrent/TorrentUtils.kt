@@ -63,11 +63,8 @@ object TorrentUtils {
         )
     }
 
+    @Deprecated("O gateway webtorrent.now.sh não funciona. Use TorrentStreamProvider.")
     fun getStreamableUrl(magnetUri: String, infoHash: String? = null): String {
-        val hash = infoHash ?: extractInfoHash(magnetUri)
-        if (!hash.isNullOrBlank()) {
-            return "https://webtorrent.now.sh/$hash"
-        }
         return magnetUri
     }
 }

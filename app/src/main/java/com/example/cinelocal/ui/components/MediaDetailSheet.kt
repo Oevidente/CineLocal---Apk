@@ -48,6 +48,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -75,6 +76,7 @@ fun MediaDetailSheet(
     onDeleteClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val context = LocalContext.current
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val media = mediaWithEpisodes.media
     val episodes = mediaWithEpisodes.episodes.sortedWith(
@@ -212,6 +214,8 @@ fun MediaDetailSheet(
                             val firstEp = episodes.firstOrNull()
                             if (firstEp != null) {
                                 onPlayEpisode(firstEp, episodes)
+                            } else {
+                                android.widget.Toast.makeText(context, "Nenhum vídeo reproduzível disponível.", android.widget.Toast.LENGTH_SHORT).show()
                             }
                         },
                         colors = ButtonDefaults.buttonColors(

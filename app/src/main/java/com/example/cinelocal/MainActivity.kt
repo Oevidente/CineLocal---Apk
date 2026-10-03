@@ -117,11 +117,7 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
 
-        db = Room.databaseBuilder(
-            applicationContext,
-            AppDatabase::class.java,
-            "cinelocal.db"
-        ).fallbackToDestructiveMigration().build()
+        db = AppDatabase.getInstance(applicationContext)
 
         repository = MediaRepository(applicationContext, db)
         mainViewModel = MainViewModel(application, repository)
@@ -448,6 +444,12 @@ fun CineLocalApp(
                                         allEpisodes = mediaWithEps.episodes
                                     )
                                     isPlayerActive = true
+                                } else {
+                                    android.widget.Toast.makeText(
+                                        context,
+                                        "Nenhum vídeo reproduzível encontrado para este item.",
+                                        android.widget.Toast.LENGTH_SHORT
+                                    ).show()
                                 }
                             },
                             onPlayEpisode = { ep, eps, mediaTitle ->

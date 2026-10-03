@@ -118,16 +118,14 @@ class MediaRepository(
         )
         mediaDao.insertMedia(mediaItem)
 
-        if (kind == MediaKind.SERIES) {
-            val episode = EpisodeEntity(
-                mediaId = mediaId,
-                seasonNumber = 1,
-                episodeNumber = 1,
-                title = "Episódio 1 - Transmissão",
-                streamUrl = url
-            )
-            episodeDao.insertEpisode(episode)
-        }
+        val episode = EpisodeEntity(
+            mediaId = mediaId,
+            seasonNumber = if (kind == MediaKind.SERIES) 1 else 0,
+            episodeNumber = 1,
+            title = if (kind == MediaKind.SERIES) "Episódio 1 - Transmissão" else (title.ifBlank { "Filme" }),
+            streamUrl = url
+        )
+        episodeDao.insertEpisode(episode)
     }
 
     suspend fun addTorrentMedia(magnetUri: String, customTitle: String? = null, isSeries: Boolean = false) = withContext(Dispatchers.IO) {
@@ -139,7 +137,6 @@ class MediaRepository(
             else -> "Torrent ($infoHash)"
         }
         val mediaId = UUID.randomUUID().toString()
-        val streamProxyUrl = TorrentUtils.getStreamableUrl(magnetUri, infoHash)
         val kind = MediaKind.TORRENT
 
         val mediaItem = MediaItemEntity(
@@ -149,20 +146,18 @@ class MediaRepository(
             overview = "Filme/Série via Torrent Magnet Link (infoHash: $infoHash)",
             streamUrl = magnetUri,
             infoHash = infoHash,
-            uriString = streamProxyUrl
+            uriString = null
         )
         mediaDao.insertMedia(mediaItem)
 
-        if (isSeries) {
-            val episode = EpisodeEntity(
-                mediaId = mediaId,
-                seasonNumber = 1,
-                episodeNumber = 1,
-                title = "Episódio 1 - $title",
-                streamUrl = streamProxyUrl
-            )
-            episodeDao.insertEpisode(episode)
-        }
+        val episode = EpisodeEntity(
+            mediaId = mediaId,
+            seasonNumber = if (isSeries) 1 else 0,
+            episodeNumber = 1,
+            title = if (isSeries) "Episódio 1 - $title" else title,
+            streamUrl = magnetUri
+        )
+        episodeDao.insertEpisode(episode)
     }
 
     suspend fun importIptvFromUrl(url: String, clearExisting: Boolean = false): Int = withContext(Dispatchers.IO) {

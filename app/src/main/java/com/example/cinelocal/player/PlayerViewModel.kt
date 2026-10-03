@@ -55,6 +55,8 @@ data class PlayerUiState(
     val selectedAudioIndex: Int = -1,
     val selectedSubtitleIndex: Int = -1,
     val errorMessage: String? = null,
+    val errorDetails: String? = null,
+    val canRetry: Boolean = false,
     val hasNextEpisode: Boolean = false,
     val nextEpisodeTitle: String? = null,
     val isCasting: Boolean = false,
@@ -82,6 +84,7 @@ class PlayerViewModel(
     private var currentChannel: IptvChannelEntity? = null
     private var currentMediaTitle: String = ""
     private var allEpisodesInSeries: List<EpisodeEntity> = emptyList()
+    private var currentSourceUri: Uri? = null
 
     init {
         castManager.init()
@@ -97,9 +100,19 @@ class PlayerViewModel(
 
     private fun createPlayer(): ExoPlayer {
         val context = getApplication<Application>()
+
+        val httpFactory = androidx.media3.datasource.DefaultHttpDataSource.Factory()
+            .setUserAgent("CineLocal/${com.example.cinelocal.BuildConfig.VERSION_NAME}")
+            .setAllowCrossProtocolRedirects(true)
+            .setConnectTimeoutMs(15_000)
+            .setReadTimeoutMs(20_000)
+
+        val dataSourceFactory = androidx.media3.datasource.DefaultDataSource.Factory(context, httpFactory)
+
         return ExoPlayer.Builder(context)
-            .setSeekBackIncrementMs(10000)
-            .setSeekForwardIncrementMs(10000)
+            .setMediaSourceFactory(androidx.media3.exoplayer.source.DefaultMediaSourceFactory(dataSourceFactory))
+            .setSeekBackIncrementMs(10_000)
+            .setSeekForwardIncrementMs(10_000)
             .build()
             .apply {
                 playWhenReady = true
@@ -126,8 +139,48 @@ class PlayerViewModel(
                     }
 
                     override fun onPlayerError(error: PlaybackException) {
+                        val userMessage = when (error.errorCode) {
+                            PlaybackException.ERROR_CODE_IO_FILE_NOT_FOUND ->
+                                "Arquivo não encontrado. Ele foi movido ou o pendrive/PC está desconectado?"
+                            PlaybackException.ERROR_CODE_IO_NO_PERMISSION ->
+                                "Sem permissão para ler o arquivo. Adicione a pasta de novo."
+                            PlaybackException.ERROR_CODE_IO_BAD_HTTP_STATUS -> {
+                                val responseCode = (error.cause as? androidx.media3.datasource.HttpDataSource.InvalidResponseCodeException)?.responseCode
+                                if (responseCode != null) "O servidor respondeu com erro HTTP $responseCode"
+                                else "O servidor respondeu com erro HTTP inesperado."
+                            }
+                            PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_FAILED,
+                            PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_TIMEOUT ->
+                                "Sem conexão com o servidor."
+                            PlaybackException.ERROR_CODE_IO_CLEARTEXT_NOT_PERMITTED ->
+                                "Link HTTP bloqueado pelo sistema de segurança do aparelho."
+                            PlaybackException.ERROR_CODE_PARSING_CONTAINER_UNSUPPORTED,
+                            PlaybackException.ERROR_CODE_PARSING_CONTAINER_MALFORMED ->
+                                "Arquivo inválido ou formato não suportado."
+                            PlaybackException.ERROR_CODE_DECODER_INIT_FAILED,
+                            PlaybackException.ERROR_CODE_DECODING_FORMAT_UNSUPPORTED,
+                            PlaybackException.ERROR_CODE_DECODING_FORMAT_EXCEEDS_CAPABILITIES ->
+                                "Este aparelho não decodifica o vídeo/áudio deste arquivo (codec não suportado)."
+                            else -> error.localizedMessage ?: "Erro desconhecido na reprodução"
+                        }
+
+                        val technicalDetails = buildString {
+                            appendLine("Código: ${error.errorCodeName} (${error.errorCode})")
+                            currentSourceUri?.let { uri ->
+                                appendLine("Fonte: ${sanitizeUrl(uri.toString())}")
+                            }
+                            error.cause?.let { cause ->
+                                appendLine("Causa: ${cause.javaClass.simpleName}: ${cause.message}")
+                            }
+                            appendLine("Mensagem: ${error.message}")
+                        }
+
+                        android.util.Log.e("Player", "${error.errorCodeName} src=$currentSourceUri", error)
+
                         _uiState.value = _uiState.value.copy(
-                            errorMessage = "Erro na reprodução: ${error.localizedMessage ?: "Formato não suportado"}",
+                            errorMessage = userMessage,
+                            errorDetails = technicalDetails,
+                            canRetry = true,
                             isBuffering = false
                         )
                     }
@@ -149,9 +202,10 @@ class PlayerViewModel(
         val currentIndex = allEpisodes.indexOfFirst { it.id == episode.id }
         val nextEp = if (currentIndex in 0 until (allEpisodes.size - 1)) allEpisodes[currentIndex + 1] else null
 
-        val isMagnet = (episode.uriString?.startsWith("magnet:", ignoreCase = true) == true) || 
-                       (episode.filePath?.startsWith("magnet:", ignoreCase = true) == true)
-        val parsedMagnet = if (isMagnet) TorrentUtils.parseMagnet(episode.uriString ?: episode.filePath ?: "") else null
+        val isMagnet = (episode.streamUrl?.startsWith("magnet:", ignoreCase = true) == true) ||
+            (episode.uriString?.startsWith("magnet:", ignoreCase = true) == true) ||
+            (episode.filePath?.startsWith("magnet:", ignoreCase = true) == true)
+        val parsedMagnet = if (isMagnet) TorrentUtils.parseMagnet(episode.streamUrl ?: episode.uriString ?: episode.filePath ?: "") else null
 
         _uiState.value = PlayerUiState(
             title = mediaTitle,
@@ -167,28 +221,64 @@ class PlayerViewModel(
 
         val resumePos = startPositionMs ?: (episode.progressSeconds * 1000)
 
-        if (castState.value.isConnected) {
-            player.pause()
-            castManager.castEpisode(
-                episode = episode,
-                mediaTitle = mediaTitle,
-                startPositionMs = resumePos
+        viewModelScope.launch {
+            val media = repository.getMediaById(episode.mediaId)
+            val resolveResult = PlaybackSourceResolver.resolve(
+                context = getApplication(),
+                ep = episode,
+                media = media
             )
-        } else {
-            val targetUriString = parsedMagnet?.streamUrl ?: episode.uriString ?: ("file://" + episode.filePath)
-            val uri = Uri.parse(targetUriString)
-            val mediaItem = MediaItem.fromUri(uri)
 
-            player.stop()
-            player.setMediaItem(mediaItem)
-            if (resumePos > 0) {
-                player.seekTo(resumePos)
+            when (resolveResult) {
+                is ResolveResult.Ok -> {
+                    val resolved = resolveResult.source
+                    currentSourceUri = resolved.uri
+
+                    if (castState.value.isConnected) {
+                        player.pause()
+                        castManager.castEpisode(
+                            episode = episode,
+                            mediaTitle = mediaTitle,
+                            startPositionMs = resumePos
+                        )
+                    } else {
+                        val mediaItem = MediaItem.Builder()
+                            .setUri(resolved.uri)
+                            .apply {
+                                if (!resolved.mimeType.isNullOrBlank()) {
+                                    setMimeType(resolved.mimeType)
+                                }
+                            }
+                            .build()
+
+                        player.stop()
+                        player.setMediaItem(mediaItem)
+                        if (resumePos > 0) {
+                            player.seekTo(resumePos)
+                        }
+                        player.prepare()
+                        player.play()
+                    }
+                    startProgressTracking()
+                }
+                is ResolveResult.Fail -> {
+                    currentSourceUri = null
+                    _uiState.value = _uiState.value.copy(
+                        errorMessage = resolveResult.reason,
+                        errorDetails = buildString {
+                            appendLine("Erro: ${resolveResult.reason}")
+                            appendLine("Episódio: ${episode.title} (ID: ${episode.id})")
+                            appendLine("Mídia: $mediaTitle (ID: ${episode.mediaId})")
+                            episode.streamUrl?.let { appendLine("streamUrl: $it") }
+                            episode.uriString?.let { appendLine("uriString: $it") }
+                            episode.filePath?.let { appendLine("filePath: $it") }
+                        },
+                        canRetry = false,
+                        isBuffering = false
+                    )
+                }
             }
-            player.prepare()
-            player.play()
         }
-
-        startProgressTracking()
     }
 
     fun playMagnetStream(magnetUri: String, title: String) {
@@ -196,30 +286,23 @@ class PlayerViewModel(
         currentChannel = null
         currentMediaTitle = title
         allEpisodesInSeries = emptyList()
+        currentSourceUri = null
 
         val parsed = TorrentUtils.parseMagnet(magnetUri)
         val displayTitle = if (title.isNotBlank()) title else parsed.name
 
         _uiState.value = PlayerUiState(
             title = displayTitle,
-            subtitle = "Torrent P2P Stream • Hash: ${parsed.infoHash.take(8)}",
+            subtitle = "Torrent P2P • ${parsed.infoHash.take(8)}",
             isLive = false,
             isTorrent = true,
-            isBuffering = true,
+            isBuffering = false,
+            errorMessage = "O motor de torrent ainda não está ativo.",
+            errorDetails = "Motor de torrent desativado.\nMagnet: ${parsed.displayName} (${parsed.infoHash})\nURI: $magnetUri",
+            canRetry = false,
             isCasting = castState.value.isConnected,
             castDeviceName = castState.value.deviceName
         )
-
-        val targetUrl = parsed.streamUrl
-        val uri = Uri.parse(targetUrl)
-        val mediaItem = MediaItem.fromUri(uri)
-
-        player.stop()
-        player.setMediaItem(mediaItem)
-        player.prepare()
-        player.play()
-
-        startProgressTracking()
     }
 
     fun playLiveStream(title: String, group: String, streamUrl: String) {
@@ -242,20 +325,70 @@ class PlayerViewModel(
             castDeviceName = castState.value.deviceName
         )
 
-        if (castState.value.isConnected) {
-            player.pause()
-            currentChannel?.let { castManager.castIptvChannel(it) }
-        } else {
-            val uri = Uri.parse(streamUrl)
-            val mediaItem = MediaItem.fromUri(uri)
+        val resolveResult = PlaybackSourceResolver.resolveLive(streamUrl)
+        when (resolveResult) {
+            is ResolveResult.Ok -> {
+                val resolved = resolveResult.source
+                currentSourceUri = resolved.uri
 
-            player.stop()
-            player.setMediaItem(mediaItem)
-            player.prepare()
-            player.play()
+                if (castState.value.isConnected) {
+                    player.pause()
+                    currentChannel?.let { castManager.castIptvChannel(it) }
+                } else {
+                    val mediaItem = MediaItem.Builder()
+                        .setUri(resolved.uri)
+                        .apply {
+                            if (!resolved.mimeType.isNullOrBlank()) {
+                                setMimeType(resolved.mimeType)
+                            }
+                        }
+                        .build()
+
+                    player.stop()
+                    player.setMediaItem(mediaItem)
+                    player.prepare()
+                    player.play()
+                }
+                startProgressTracking()
+            }
+            is ResolveResult.Fail -> {
+                currentSourceUri = null
+                _uiState.value = _uiState.value.copy(
+                    errorMessage = resolveResult.reason,
+                    errorDetails = "Erro: ${resolveResult.reason}\nCanal: $title ($group)\nURL: $streamUrl",
+                    canRetry = true,
+                    isBuffering = false
+                )
+            }
         }
+    }
 
-        startProgressTracking()
+    fun retryPlayback() {
+        _uiState.value = _uiState.value.copy(errorMessage = null, errorDetails = null, isBuffering = true)
+        val ep = currentEpisode
+        val ch = currentChannel
+        when {
+            ep != null -> playMediaEpisode(ep, currentMediaTitle, allEpisodesInSeries, _uiState.value.currentPosition)
+            ch != null -> playLiveStream(ch.name, ch.group, ch.url)
+            else -> {
+                player.prepare()
+                player.play()
+            }
+        }
+    }
+
+    private fun sanitizeUrl(url: String): String {
+        return try {
+            val uri = Uri.parse(url)
+            val userInfo = uri.userInfo
+            var result = url
+            if (!userInfo.isNullOrBlank()) {
+                result = result.replace(userInfo, "***:***")
+            }
+            result.replace(Regex("(?i)(password|pass|pwd|token|key|secret)=([^&]+)"), "$1=***")
+        } catch (_: Exception) {
+            url
+        }
     }
 
     fun triggerCastForCurrentMedia() {
