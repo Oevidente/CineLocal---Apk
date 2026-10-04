@@ -6,6 +6,8 @@
   <title>CineLocal - Biblioteca Offline & IPTV</title>
   <meta name="description" content="Central de mídia offline estilo Netflix para Android, PC e Smart TV. Assista filmes, séries, torrents e canais de TV ao vivo via IPTV.">
   <link rel="manifest" href="manifest.json">
+  <link rel="icon" type="image/png" href="favicon.png">
+  <link rel="apple-touch-icon" href="icon-192.png">
   <meta name="theme-color" content="#E50914">
   <style>
     :root {
@@ -40,9 +42,27 @@
       top: 0;
       z-index: 100;
     }
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .brand-icon {
+      width: 34px;
+      height: 34px;
+      background: var(--primary);
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 900;
+      font-size: 1.3rem;
+      color: #FFFFFF;
+      box-shadow: 0 2px 8px rgba(229, 9, 20, 0.4);
+    }
     .logo {
       font-weight: 900;
-      font-size: 1.5rem;
+      font-size: 1.4rem;
       color: var(--primary);
       letter-spacing: 1px;
     }
@@ -63,11 +83,28 @@
     }
     .hero {
       text-align: center;
-      padding: 2rem 1rem;
+      padding: 2.5rem 1.5rem;
       background: linear-gradient(180deg, #1E1E1E 0%, #121212 100%);
       border-radius: 16px;
       margin-bottom: 2rem;
       border: 1px solid var(--surface-variant);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+    .hero-badge-c {
+      width: 64px;
+      height: 64px;
+      background: var(--primary);
+      border-radius: 16px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 900;
+      font-size: 2.5rem;
+      color: #FFFFFF;
+      box-shadow: 0 6px 20px rgba(229, 9, 20, 0.5);
+      margin-bottom: 1.25rem;
     }
     .hero h1 {
       font-size: 2.2rem;
@@ -78,6 +115,7 @@
       font-size: 1.1rem;
       margin-bottom: 1.5rem;
       line-height: 1.5;
+      max-width: 650px;
     }
     .btn-download {
       display: inline-flex;
@@ -141,22 +179,26 @@
 <body>
 
   <header>
-    <div class="logo">CINELOCAL</div>
-    <span class="badge">v1.6.4</span>
+    <div class="brand">
+      <div class="brand-icon">C</div>
+      <div class="logo">CINELOCAL</div>
+    </div>
+    <span class="badge">v1.6.5</span>
   </header>
 
   <main>
     <section class="hero">
+      <div class="hero-badge-c">C</div>
       <h1>Sua Biblioteca de Mídia Offline & IPTV</h1>
       <p>Assista seus filmes, séries, torrents e canais de TV ao vivo com a melhor experiência no Android e PC.</p>
       
-      <a href="apk/CineLocal-v1.6.4.apk" class="btn-download" download>
+      <a href="apk/CineLocal-v1.6.5.apk" class="btn-download" download>
         <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-        Baixar CineLocal APK (v1.6.4)
+        Baixar CineLocal APK (v1.6.5)
       </a>
 
       <div class="version-info">
-        Atualização v1.6.4 • APK direto sem anúncios ou limite de banda
+        Atualização v1.6.5 • APK direto com novo logotipo oficial
       </div>
     </section>
 
@@ -181,7 +223,7 @@
   </main>
 
   <footer>
-    CineLocal • Versão 1.6.4 • Desenvolvido para Android & PC
+    CineLocal • Versão 1.6.5 • Desenvolvido para Android & PC
   </footer>
 
   <script>

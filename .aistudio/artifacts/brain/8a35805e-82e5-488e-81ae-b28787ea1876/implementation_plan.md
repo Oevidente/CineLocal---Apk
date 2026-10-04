@@ -1,62 +1,84 @@
-# Implementation Plan: CineLocal - Cast Local Video Moov Atom & MKV Container Streaming Fix
+# Padronização Visual do CineLocal — Logotipo e Ícones "C"
 
-Fix Chromecast connection resets (`Connection reset`) when streaming local phone files, MKV containers, and MP4 files with tail `moov` atoms to Google Cast devices.
+Unificar a identidade visual do **CineLocal** em todas as plataformas (Android nativo e PWA Web), implementando o logotipo oficial com a letra **C** branca sobre o fundo vermelho cinema (`#E50914`), atualizando ícones adaptativos do APK, favicon, manifesto PWA e elementos da interface do aplicativo.
 
-## User Review & Confirmed Decisions
+---
+
+## User Review & Critical Decisions
 
 > [!IMPORTANT]
-> The diagnostic logs pinpointed the exact issue: Chromecast attempts to probe MP4 `moov` metadata atoms at the end of the 324MB file, closing initial `bytes=0-` connections. This update adds FastStart atom tail probing, MKV Matroska demuxer hints, and Web Receiver compatibility.
-
-- **MP4 FastStart Moov Tail Probing**: Refactored `MediaProxyServer.kt` to handle rapid sequential tail-range probes (`bytes=N-TOTAL`) from Chromecast when inspecting `moov` metadata atoms in local phone MP4 files.
-- **MKV & AC3 Container Support**: Added Matroska demuxer MIME hints (`video/x-matroska`, `video/webm`, `video/mp4`) and fallback Web Receiver App ID configuration in `CastOptionsProvider.kt` and `CastManager.kt`.
-- **Diagnostic Logging**: Enhanced log messages in `CastDiagnosticsScreen` to record tail-range probes, `moov` atom seek offsets, and socket reconnection events.
+> Decisões confirmadas com base nas preferências selecionadas:
+> - **Estilo da Letra C**: Sólida, elegante e minimalista, com tipografia em peso bold e fundo vermelho cinema puro (`#E50914`).
+> - **Escopo de Aplicação**:
+>   1. **Aplicativo Android (APK)**: Novo ícone adaptativo (`ic_launcher.xml`, `ic_launcher_round.xml`, `ic_launcher_foreground.xml`, `ic_launcher_background.xml` e rasters PNG em todas as densidades).
+>   2. **PWA & Web**: Favicon SVG/PNG, `manifest.json`, `index.html` e telas de instalação.
+>   3. **UI do Aplicativo**: Cabeçalho superior (Header / TopAppBar) e Hero Banner / Apresentação exibindo o novo emblema "C" em destaque.
 
 ---
 
-## 1. Root Cause Analysis from Diagnostic Logs
+## 1. Overview & Core Concept
+
+- **O que será feito**:
+  - Geração de vetores SVG/XML nítidos e bitmaps de alta definição do emblema "C" branco sobre `#E50914`.
+  - Configuração do ícone adaptativo oficial do Android com safe-zone de 66dp no canvas de 108dp.
+  - Atualização dos metadados e assets da versão PWA instalável no desktop e mobile.
+  - Atualização do componente visual de logo na barra superior e telas do app.
+- **Público-alvo**: Usuários do CineLocal no Android e navegadores desktop/mobile.
+- **Valor agregado**: Reconhecimento visual imediato na tela inicial do celular, no launcher da TV, na aba do navegador e dentro da experiência do app.
+
+---
+
+## 2. User Experience & Visual Design
+
+### Identidade Visual & Paleta
+- **Cor de Fundo**: Vermelho Cinema Puro (`#E50914` / `CineRed`).
+- **Símbolo Central**: Letra **C** estilizada em branco puro (`#FFFFFF`), traço limpo, cantos harmônicos e proporção equilibrada.
+- **Tema do App**: Modo escuro cinematográfico (`#141414` background, `#1F1F1F` surface) com acentos em vermelho cinema (`#E50914`).
+
+### Onde a Nova Marca Aparece
+1. **Ícone do Launcher (Android)**: Ícone adaptativo quadrado e redondo na home do Android.
+2. **Barra Superior (TopAppBar)**: Emblema "C" estilizado ao lado do texto "CineLocal" com badge de status.
+3. **Hero Banner & Splash**: Card de boas-vindas com o emblema em destaque.
+4. **PWA / Web Browser**: Favicon na aba do navegador, tela de splash PWA ao abrir no Android/Windows.
+
+---
+
+## 3. Key Product Decisions & Trade-Offs
+
+- **Vetor XML Nativo vs Imagem Raster no Foreground**:
+  - *Abordagem*: Utilizar desenho vetorial limpo no `ic_launcher_foreground.xml` e no cabeçalho do app para garantir nitidez matemática em qualquer resolução (de telas 720p até 4K e TVs).
+  - *Por quê*: Evita distorções, reduz tamanho do APK e carrega instantaneamente.
+- **Manutenção de Versão e Pasta APK**:
+  - O APK continuará sendo mantido atualizado na pasta `apk/` com incremento de versão para download direto.
+
+---
+
+## 4. Technical Architecture & Data Strategy
 
 ```
-[14:10:23] Mídia registrada: token=51717d65fb374e9a URI=content://... size=324013168 mime=video/mp4 -> URL=http://192.168.1.6:8899/m/51717d65fb374e9a.mp4
-[14:10:23] Requisição HTTP recebida [192.168.1.2]: GET /m/51717d65fb374e9a.mp4 (Range: bytes=0-)
-[14:10:23] Servindo mídia [192.168.1.2]: video/mp4 range=0-324013167/324013168 (324013168 bytes)
-[14:10:26] [FINALIZADO SOKET] Conexão de mídia concluída ou fechada pelo receptor: Connection reset
+┌────────────────────────────────────────────────────────┐
+│                   Identidade Visual                    │
+│            Letra C Branca sobre Fundo #E50914          │
+└───────────────────────────┬────────────────────────────┘
+                            │
+       ┌────────────────────┼────────────────────┐
+       ▼                    ▼                    ▼
+┌──────────────┐    ┌──────────────┐    ┌──────────────┐
+│ Android APK  │    │   PWA Web    │    │  Compose UI  │
+│  - Launcher  │    │  - Favicon   │    │  - Header    │
+│  - RoundIcon │    │  - Manifest  │    │  - Hero Logo │
+│  - Vectors   │    │  - Index PWA │    │  - Dialogs   │
+└──────────────┘    └──────────────┘    └──────────────┘
 ```
 
-- **Analysis**:
-  1. Phone IP `192.168.1.6` and Chromecast IP `192.168.1.2` are connected and communicating.
-  2. Chromecast connected and issued `GET /m/51717d65fb374e9a.mp4` with `Range: bytes=0-`.
-  3. Chromecast read the first few KB, realized the MP4 `moov` atom was located at the tail of the 324MB file (standard for mobile camera recordings), and closed the socket (`Connection reset`) to issue a tail range request (`bytes=324000000-`).
-  4. If the server does not immediately answer subsequent tail range probes with proper `206 Partial Content` headers and fast random-access `FileChannel` positioning, Chromecast aborts playback.
-
----
-
-## 2. Technical Strategy & Fixes
-
-1. **Fast Tail Range Probing (`MediaProxyServer.kt`)**:
-   - Optimize random-access reading in `streamChannel`: when Chromecast requests a tail range (e.g. `bytes=324000000-324013168` or `bytes=-65536`), `MediaProxyServer` immediately positions the `FileChannel` or `ParcelFileDescriptor` to `startPos` without buffering the preceding bytes.
-   - Support suffix ranges (`bytes=-N`) and handle fast socket re-openings cleanly without throwing unhandled socket exceptions.
-
-2. **Container & MIME Type Detection (`CastMediaResolver.kt` & `MediaProxyServer.kt`)**:
-   - Inspect URI extension and header magic bytes (`ftyp`, `ebml` / Matroska `1A 45 DF A3`).
-   - If the file is an MKV or Matroska container, supply compatible MIME hints (`video/x-matroska`, `video/webm`, `video/mp4`) so Chromecast demuxers parse audio/video tracks correctly.
-
-3. **Web Receiver Application ID (`CastOptionsProvider.kt` & `CastManager.kt`)**:
-   - Provide fallback support for standard and custom CAF Web Receiver Application IDs capable of playing MKV containers and AC3 audio streams.
-
-4. **Diagnostic Feedback (`CastDiagnosticsScreen.kt`)**:
-   - Log explicit tail probe ranges (e.g. `[PROBE MOOV] Chromecast buscando átomos no final do arquivo: bytes=324000000-324013168`).
-
----
-
-## 3. Implementation Steps
-
-1. **Refactor MediaProxyServer**:
-   - Add suffix range parsing (`bytes=-N`) and fast tail seeks.
-   - Enhance logging for probe requests.
-
-2. **Refactor CastMediaResolver & CastManager**:
-   - Update MIME type detection for MKV, WebM, and MP4.
-   - Support custom Web Receiver App ID fallback options.
-
-3. **Verification**:
-   - Run `compile_applet` to verify compilation.
+- **Arquivos e Recursos Envolvidos**:
+  - Android Resources:
+    - `res/drawable/ic_launcher_foreground.xml`
+    - `res/drawable/ic_launcher_background.xml`
+    - `res/mipmap-*/ic_launcher.png` e `ic_launcher_round.png`
+    - `res/drawable/ic_cinelocal_logo.xml`
+  - Web / PWA:
+    - `index.html` (logo SVG inline / favicon)
+    - `manifest.json` (ícones do app instalado)
+  - UI Components:
+    - `HomeScreen.kt` / `HeroBanner.kt` / `MainActivity.kt` (atualização do logotipo do app bar)

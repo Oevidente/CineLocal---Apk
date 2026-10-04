@@ -1,6 +1,6 @@
 {
-  "summary":  "Implementation plan to fix Chromecast socket connection resets on local phone videos, MKV containers, and MP4 moov atom probing, and support Web Receiver compatibility.",
-  "updatedAt":  "2026-10-04T17:12:32.352477304Z",
+  "summary":  "Plano de implementação para padronização da identidade visual do CineLocal: criação do novo logotipo com a letra C branca sobre fundo vermelho (#E50914), atualização dos ícones adaptativos do aplicativo Android (APK), ícones e manifest do PWA / Web, e integração no cabeçalho e tela de apresentação do app.",
+  "updatedAt":  "2026-10-04T17:59:37.459026432Z",
   "requestFeedback":  true,
   "userFacing":  true
 }

@@ -1,8 +1,11 @@
-const CACHE_NAME = 'cinelocal-pwa-v1.6.4';
+const CACHE_NAME = 'cinelocal-pwa-v1.6.5';
 const ASSETS = [
   './',
   './index.html',
-  './manifest.json'
+  './manifest.json',
+  './icon-192.png',
+  './icon-512.png',
+  './favicon.png'
 ];
 
 self.addEventListener('install', (e) => {

@@ -385,7 +385,24 @@ fun CineLocalApp(
                             horizontalArrangement = Arrangement.SpaceBetween
                         ) {
                             if (!isSearchExpanded) {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    Surface(
+                                        color = CineRed,
+                                        shape = RoundedCornerShape(6.dp),
+                                        modifier = Modifier.size(26.dp)
+                                    ) {
+                                        Box(contentAlignment = Alignment.Center) {
+                                            Text(
+                                                text = "C",
+                                                fontWeight = FontWeight.Black,
+                                                color = Color.White,
+                                                fontSize = 16.sp
+                                            )
+                                        }
+                                    }
                                     Text(
                                         text = "CINELOCAL",
                                         style = MaterialTheme.typography.titleLarge,

@@ -309,16 +309,16 @@ fun HomeScreen(
                         verticalArrangement = Arrangement.spacedBy(14.dp)
                     ) {
                         Surface(
-                            color = CineRed.copy(alpha = 0.15f),
+                            color = CineRed,
                             shape = RoundedCornerShape(16.dp),
-                            modifier = Modifier.size(72.dp)
+                            modifier = Modifier.size(68.dp)
                         ) {
                             Box(contentAlignment = Alignment.Center) {
-                                Icon(
-                                    imageVector = Icons.Default.Folder,
-                                    contentDescription = null,
-                                    tint = CineRed,
-                                    modifier = Modifier.size(38.dp)
+                                Text(
+                                    text = "C",
+                                    fontWeight = FontWeight.Black,
+                                    color = Color.White,
+                                    fontSize = 38.sp
                                 )
                             }
                         }
