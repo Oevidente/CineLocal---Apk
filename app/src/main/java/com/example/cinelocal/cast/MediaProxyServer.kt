@@ -206,6 +206,9 @@ class MediaProxyServer(private val context: Context) {
     private fun handleClient(socket: Socket) {
         val clientIp = socket.inetAddress?.hostAddress ?: "desconhecido"
         try {
+            socket.tcpNoDelay = true
+            socket.soTimeout = 30000
+            socket.sendBufferSize = 256 * 1024
             socket.use { s ->
                 val reader = BufferedReader(InputStreamReader(s.getInputStream()))
                 val out = BufferedOutputStream(s.getOutputStream())
@@ -623,7 +626,7 @@ class MediaProxyServer(private val context: Context) {
         headerBuilder.append("Access-Control-Allow-Methods: GET, HEAD, OPTIONS\r\n")
         headerBuilder.append("Access-Control-Allow-Headers: Range, Content-Type, Accept, Origin, User-Agent, X-Requested-With, Authorization\r\n")
         headerBuilder.append("Access-Control-Expose-Headers: Content-Length, Content-Range, Accept-Ranges, Content-Type\r\n")
-        headerBuilder.append("Server: CineLocal-MediaProxy/1.6.3\r\n")
+        headerBuilder.append("Server: CineLocal-MediaProxy/1.6.6\r\n")
 
         if (contentLength > 0) {
             headerBuilder.append("Content-Length: $contentLength\r\n")
@@ -631,7 +634,8 @@ class MediaProxyServer(private val context: Context) {
         if (isPartial && totalLength > 0) {
             headerBuilder.append("Content-Range: bytes $start-$end/$totalLength\r\n")
         }
-        headerBuilder.append("Connection: close\r\n\r\n")
+        headerBuilder.append("Connection: keep-alive\r\n")
+        headerBuilder.append("Keep-Alive: timeout=60, max=1000\r\n\r\n")
 
         out.write(headerBuilder.toString().toByteArray())
         out.flush()

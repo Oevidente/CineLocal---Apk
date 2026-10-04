@@ -140,6 +140,8 @@ fun PlayerScreen(
                 openCastWithPermissions()
             },
             onRetryClick = { playerViewModel.retryPlayback() },
+            onResumeLocally = { playerViewModel.continuePlaybackOnDevice() },
+            onDismissCastError = { playerViewModel.dismissCastError() },
             modifier = Modifier.fillMaxSize()
         )
 

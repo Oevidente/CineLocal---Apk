@@ -131,14 +131,23 @@ object CastMediaResolver {
             }
             val trackCount = extractor.trackCount
             val tracksList = mutableListOf<String>()
+            var is4kAvc = false
             for (i in 0 until trackCount) {
                 val format = extractor.getTrackFormat(i)
                 val mime = format.getString(android.media.MediaFormat.KEY_MIME) ?: "desconhecido"
-                val width = if (format.containsKey(android.media.MediaFormat.KEY_WIDTH)) "${format.getInteger(android.media.MediaFormat.KEY_WIDTH)}x${format.getInteger(android.media.MediaFormat.KEY_HEIGHT)}" else ""
+                val width = if (format.containsKey(android.media.MediaFormat.KEY_WIDTH)) format.getInteger(android.media.MediaFormat.KEY_WIDTH) else 0
+                val height = if (format.containsKey(android.media.MediaFormat.KEY_HEIGHT)) format.getInteger(android.media.MediaFormat.KEY_HEIGHT) else 0
+                val dimStr = if (width > 0) "${width}x${height}" else ""
                 val sampleRate = if (format.containsKey(android.media.MediaFormat.KEY_SAMPLE_RATE)) "${format.getInteger(android.media.MediaFormat.KEY_SAMPLE_RATE)}Hz" else ""
-                tracksList.add("$mime $width $sampleRate".trim())
+                if (width > 1920 && mime.contains("avc", ignoreCase = true)) {
+                    is4kAvc = true
+                }
+                tracksList.add("$mime $dimStr $sampleRate".trim())
             }
             proxyServer.log("Fonte local para Cast: uri=$uri detectedMime=${detectMimeType(context, uri)} tracks=${tracksList.joinToString(" | ")}")
+            if (is4kAvc) {
+                proxyServer.log("[AVISO CODEC] Vídeo 4K AVC (H.264) detectado. Modelos padrão de Chromecast suportam até 1080p em H.264. Se o receptor rejeitar, utilize a opção 'Assistir no Celular'.")
+            }
         } catch (e: Exception) {
             proxyServer.log("Fonte local para Cast: uri=$uri (MediaExtractor: ${e.message})")
         } finally {

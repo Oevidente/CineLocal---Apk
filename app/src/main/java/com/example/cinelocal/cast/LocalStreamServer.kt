@@ -246,6 +246,10 @@ class LocalStreamServer(private val context: Context) {
         headerBuilder.append("Content-Type: $activeMimeType\r\n")
         headerBuilder.append("Accept-Ranges: bytes\r\n")
         headerBuilder.append("Access-Control-Allow-Origin: *\r\n")
+        headerBuilder.append("Access-Control-Allow-Methods: GET, HEAD, OPTIONS\r\n")
+        headerBuilder.append("Access-Control-Allow-Headers: Range, Content-Type, Accept, Origin, User-Agent, X-Requested-With, Authorization\r\n")
+        headerBuilder.append("Access-Control-Expose-Headers: Content-Length, Content-Range, Accept-Ranges, Content-Type\r\n")
+        headerBuilder.append("Server: CineLocal-StreamServer/1.6.6\r\n")
 
         if (contentLength > 0) {
             headerBuilder.append("Content-Length: $contentLength\r\n")
@@ -253,7 +257,8 @@ class LocalStreamServer(private val context: Context) {
         if (isRange && totalLength > 0) {
             headerBuilder.append("Content-Range: bytes $start-$end/$totalLength\r\n")
         }
-        headerBuilder.append("Connection: close\r\n\r\n")
+        headerBuilder.append("Connection: keep-alive\r\n")
+        headerBuilder.append("Keep-Alive: timeout=60, max=1000\r\n\r\n")
 
         out.write(headerBuilder.toString().toByteArray())
         out.flush()

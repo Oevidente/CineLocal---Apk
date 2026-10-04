@@ -68,6 +68,7 @@ import androidx.compose.material.icons.filled.Audiotrack
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.PhoneAndroid
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -125,6 +126,9 @@ fun PlayerOverlay(
     onNextEpisodeClick: () -> Unit,
     onCastClick: () -> Unit,
     onRetryClick: () -> Unit = {},
+    onResumeLocally: () -> Unit = {},
+    onDismissCastError: () -> Unit = {},
+    onOpenDiagnostics: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     var areControlsVisible by remember { mutableStateOf(true) }
@@ -207,6 +211,23 @@ fun PlayerOverlay(
             }
         }
 
+        // Floating Cast Error Banner
+        castState.playbackError?.let { pError ->
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(top = 16.dp, start = 12.dp, end = 12.dp),
+                contentAlignment = Alignment.TopCenter
+            ) {
+                CastErrorBanner(
+                    errorInfo = pError,
+                    onResumeLocally = onResumeLocally,
+                    onOpenDiagnostics = onOpenDiagnostics,
+                    onDismiss = onDismissCastError
+                )
+            }
+        }
+
         // Error message overlay
         uiState.errorMessage?.let { errorMsg ->
             val context = LocalContext.current
@@ -214,6 +235,7 @@ fun PlayerOverlay(
             val detailsText = uiState.errorDetails ?: errorMsg
 
             val isTorrent = detailsText.contains("magnet:?", ignoreCase = true) || errorMsg.contains("magnet", ignoreCase = true)
+            val isCastRelated = castState.isConnected || errorMsg.contains("Chromecast", ignoreCase = true) || errorMsg.contains("TV", ignoreCase = true)
 
             Box(
                 modifier = Modifier
@@ -227,7 +249,7 @@ fun PlayerOverlay(
                     modifier = Modifier.fillMaxWidth(0.9f)
                 ) {
                     Text(
-                        text = if (isTorrent) "Reprodução de Torrent P2P" else "Erro na Reprodução",
+                        text = if (isTorrent) "Reprodução de Torrent P2P" else if (isCastRelated) "Transmissão na TV" else "Erro na Reprodução",
                         style = MaterialTheme.typography.titleLarge,
                         color = if (isTorrent) Color(0xFF38BDF8) else CineRed,
                         fontWeight = FontWeight.Bold
@@ -245,6 +267,17 @@ fun PlayerOverlay(
                         horizontalArrangement = Arrangement.spacedBy(10.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
+                        if (isCastRelated) {
+                            Button(
+                                onClick = onResumeLocally,
+                                colors = ButtonDefaults.buttonColors(containerColor = CineRed)
+                            ) {
+                                Icon(Icons.Default.PhoneAndroid, contentDescription = null, modifier = Modifier.size(18.dp), tint = Color.White)
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text("Assistir no Celular", color = Color.White, fontWeight = FontWeight.Bold)
+                            }
+                        }
+
                         if (isTorrent) {
                             val magnetUrl = detailsText.lines().find { it.contains("magnet:?", ignoreCase = true) }
                                 ?.substringAfter("streamUrl: ")
@@ -260,7 +293,7 @@ fun PlayerOverlay(
                                 Spacer(modifier = Modifier.width(6.dp))
                                 Text("Abrir no App Torrent", color = Color.White, fontWeight = FontWeight.Bold)
                             }
-                        } else if (uiState.canRetry) {
+                        } else if (uiState.canRetry && !isCastRelated) {
                             Button(
                                 onClick = onRetryClick,
                                 colors = ButtonDefaults.buttonColors(containerColor = CineRed)

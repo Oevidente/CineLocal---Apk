@@ -38,6 +38,17 @@ data class CastDeviceInfo(
     val isSelected: Boolean = false
 )
 
+data class CastPlaybackErrorInfo(
+    val title: String,
+    val subtitle: String? = null,
+    val message: String,
+    val technicalDetails: String? = null,
+    val positionMs: Long = 0L,
+    val episode: EpisodeEntity? = null,
+    val media: MediaItemEntity? = null,
+    val channel: IptvChannelEntity? = null
+)
+
 data class CastState(
     val isConnected: Boolean = false,
     val isConnecting: Boolean = false,
@@ -50,6 +61,7 @@ data class CastState(
     val title: String = "",
     val subtitle: String = "",
     val lastError: String? = null,
+    val playbackError: CastPlaybackErrorInfo? = null,
     val availableDevices: List<CastDeviceInfo> = emptyList()
 )
 
@@ -295,6 +307,31 @@ class CastManager private constructor(private val context: Context) {
         startProgressPolling()
     }
 
+    private var lastCastEpisode: EpisodeEntity? = null
+    private var lastCastMedia: MediaItemEntity? = null
+    private var lastCastChannel: IptvChannelEntity? = null
+    private var lastCastTitle: String = ""
+    private var lastCastSubtitle: String = ""
+    private var lastCastStartPosition: Long = 0L
+
+    var onRequestResumeLocally: ((EpisodeEntity?, IptvChannelEntity?, String, Long) -> Unit)? = null
+
+    fun clearPlaybackError() {
+        _castState.value = _castState.value.copy(playbackError = null, lastError = null)
+    }
+
+    fun resumeLocally() {
+        val err = _castState.value.playbackError
+        val ep = err?.episode ?: lastCastEpisode
+        val ch = err?.channel ?: lastCastChannel
+        val title = err?.title ?: lastCastTitle
+        val pos = if ((err?.positionMs ?: 0L) > 0) err!!.positionMs else (_castState.value.currentPosition.takeIf { it > 0 } ?: lastCastStartPosition)
+
+        clearPlaybackError()
+        disconnect()
+        onRequestResumeLocally?.invoke(ep, ch, title, pos)
+    }
+
     private val remoteMediaClientCallback = object : RemoteMediaClient.Callback() {
         override fun onStatusUpdated() {
             val client = castSession?.remoteMediaClient ?: return
@@ -304,8 +341,23 @@ class CastManager private constructor(private val context: Context) {
                 if (status.playerState == MediaStatus.PLAYER_STATE_IDLE &&
                     status.idleReason == MediaStatus.IDLE_REASON_ERROR
                 ) {
-                    val errorMsg = "A TV encontrou um erro ao decodificar a mídia (formato não suportado)."
-                    _castState.value = _castState.value.copy(lastError = errorMsg)
+                    val errorMsg = "A TV encontrou um erro ao decodificar a mídia (formato ou resolução não suportado pelo Chromecast)."
+                    val techDetails = "O receptor Chromecast encerrou a reprodução (IDLE_REASON_ERROR). Isto ocorre quando o arquivo utiliza um codec ou resolução (ex: 4K AVC/H.264 ou perfil de áudio multicanal) não suportado pelo hardware da TV."
+                    _castState.value = _castState.value.copy(
+                        isPlaying = false,
+                        isBuffering = false,
+                        lastError = errorMsg,
+                        playbackError = CastPlaybackErrorInfo(
+                            title = lastCastTitle.ifBlank { _castState.value.title },
+                            subtitle = lastCastSubtitle.ifBlank { _castState.value.subtitle },
+                            message = errorMsg,
+                            technicalDetails = techDetails,
+                            positionMs = lastCastStartPosition,
+                            episode = lastCastEpisode,
+                            media = lastCastMedia,
+                            channel = lastCastChannel
+                        )
+                    )
                     onLoadResult?.invoke(false, errorMsg)
                 }
 
@@ -389,7 +441,8 @@ class CastManager private constructor(private val context: Context) {
                         isBuffering = false,
                         currentPosition = if (pos > 0) pos else startPositionMs,
                         duration = if (dur > 0) dur else 0,
-                        lastError = null
+                        lastError = null,
+                        playbackError = null
                     )
                     onResult?.invoke(true, null)
                     reported = true
@@ -398,11 +451,22 @@ class CastManager private constructor(private val context: Context) {
 
                 if (playerState == MediaStatus.PLAYER_STATE_IDLE && idleReason == MediaStatus.IDLE_REASON_ERROR) {
                     val errorMsg = "A TV encontrou um erro ao decodificar a mídia (formato ou codec não suportado pelo Chromecast)."
+                    val techDetails = "O receptor Chromecast reportou erro de decodificação (IDLE_REASON_ERROR). Codecs 4K AVC/H.264 ou formatos não aceitos pelo receptor podem ser assistidos diretamente no celular."
                     proxyServer.log("[ERRO CAST] Receptor retornou IDLE com IDLE_REASON_ERROR")
                     _castState.value = _castState.value.copy(
                         isPlaying = false,
                         isBuffering = false,
-                        lastError = errorMsg
+                        lastError = errorMsg,
+                        playbackError = CastPlaybackErrorInfo(
+                            title = mediaTitle,
+                            subtitle = subtitle,
+                            message = errorMsg,
+                            technicalDetails = techDetails,
+                            positionMs = startPositionMs,
+                            episode = lastCastEpisode,
+                            media = lastCastMedia,
+                            channel = lastCastChannel
+                        )
                     )
                     onResult?.invoke(false, errorMsg)
                     reported = true
@@ -440,6 +504,12 @@ class CastManager private constructor(private val context: Context) {
         subtitleVttUrl: String? = null,
         onResult: ((Boolean, String?) -> Unit)? = null
     ) {
+        lastCastEpisode = episode
+        lastCastMedia = media
+        lastCastChannel = null
+        lastCastTitle = mediaTitle
+        lastCastSubtitle = episode.title
+        lastCastStartPosition = startPositionMs
         val client = castSession?.remoteMediaClient
         if (client == null) {
             onResult?.invoke(false, "Nenhuma sessão ativa com o Chromecast")
@@ -527,6 +597,13 @@ class CastManager private constructor(private val context: Context) {
     }
 
     fun castIptvChannel(channel: IptvChannelEntity, onResult: ((Boolean, String?) -> Unit)? = null) {
+        lastCastEpisode = null
+        lastCastMedia = null
+        lastCastChannel = channel
+        lastCastTitle = channel.name
+        lastCastSubtitle = channel.group
+        lastCastStartPosition = 0L
+
         val client = castSession?.remoteMediaClient
         if (client == null) {
             val err = "Nenhuma sessão ativa com o Chromecast"

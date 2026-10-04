@@ -1,6 +1,6 @@
 {
-  "summary":  "Plano de implementação para padronização da identidade visual do CineLocal: criação do novo logotipo com a letra C branca sobre fundo vermelho (#E50914), atualização dos ícones adaptativos do aplicativo Android (APK), ícones e manifest do PWA / Web, e integração no cabeçalho e tela de apresentação do app.",
-  "updatedAt":  "2026-10-04T17:59:37.459026432Z",
+  "summary":  "Plano de implementação completo para correção de compatibilidade de streaming Cast (HTTP headers, chunks, range requests) e resolução dos itens de QA com fallback amigável no celular.",
+  "updatedAt":  "2026-10-04T18:11:15.680920531Z",
   "requestFeedback":  true,
   "userFacing":  true
 }

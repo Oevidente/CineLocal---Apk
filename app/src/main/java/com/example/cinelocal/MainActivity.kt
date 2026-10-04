@@ -80,6 +80,7 @@ import com.example.cinelocal.ui.UiEvent
 import com.example.cinelocal.ui.components.AddMediaDialog
 import com.example.cinelocal.ui.components.CastButton
 import com.example.cinelocal.ui.components.CastDeviceDialog
+import com.example.cinelocal.ui.components.CastErrorBanner
 import com.example.cinelocal.ui.components.IptvImportDialog
 import com.example.cinelocal.ui.components.MediaDetailSheet
 import com.example.cinelocal.ui.components.NativeCastButton
@@ -576,7 +577,25 @@ fun CineLocalApp(
                     }
                 }
 
-                when (activeTab) {
+                Column(modifier = Modifier.fillMaxSize()) {
+                    castState.playbackError?.let { pError ->
+                        CastErrorBanner(
+                            errorInfo = pError,
+                            onResumeLocally = {
+                                isPlayerActive = true
+                                playerViewModel.continuePlaybackOnDevice()
+                            },
+                            onOpenDiagnostics = {
+                                showDiagnosticsScreen = true
+                            },
+                            onDismiss = {
+                                playerViewModel.dismissCastError()
+                            }
+                        )
+                    }
+
+                    Box(modifier = Modifier.weight(1f)) {
+                        when (activeTab) {
                     AppTab.HOME -> {
                         HomeScreen(
                             allMedia = allMedia,
@@ -721,6 +740,7 @@ fun CineLocalApp(
                 }
             }
         }
+    }
 
         // Details Bottom Sheet
         selectedMediaWithEpisodes?.let { mediaWithEps ->
@@ -841,4 +861,5 @@ fun CineLocalApp(
             )
         }
     }
+}
 }

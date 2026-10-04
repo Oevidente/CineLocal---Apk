@@ -111,6 +111,13 @@ class PlayerViewModel(
 
     init {
         castManager.init()
+        castManager.onRequestResumeLocally = { ep, ch, title, pos ->
+            when {
+                ep != null -> playMediaEpisode(ep, title.ifBlank { currentMediaTitle }, allEpisodesInSeries, pos)
+                ch != null -> playLiveStream(ch.name, ch.group, ch.url)
+                else -> retryPlayback()
+            }
+        }
         viewModelScope.launch {
             _openSubtitlesApiKey.value = repository.getSetting("opensubtitles_api_key").firstOrNull() ?: ""
             _openSubtitlesUsername.value = repository.getSetting("opensubtitles_username").firstOrNull() ?: ""
@@ -937,6 +944,15 @@ class PlayerViewModel(
             repository.setSetting("opensubtitles_username", user)
             repository.setSetting("opensubtitles_password", pass)
         }
+    }
+
+    fun continuePlaybackOnDevice() {
+        castManager.resumeLocally()
+    }
+
+    fun dismissCastError() {
+        castManager.clearPlaybackError()
+        _uiState.value = _uiState.value.copy(errorMessage = null, errorDetails = null)
     }
 
     fun releasePlayer() {
