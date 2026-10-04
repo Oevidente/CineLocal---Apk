@@ -1,0 +1,74 @@
+[
+  {
+    "id": "pick-folder",
+    "file": "app/src/main/java/com/example/cinelocal/MainActivity.kt",
+    "pattern": "OpenDocumentTree",
+    "desc": "Selecionar pasta local"
+  },
+  {
+    "id": "pick-files",
+    "file": "app/src/main/java/com/example/cinelocal/MainActivity.kt",
+    "pattern": "OpenMultipleDocuments",
+    "desc": "Selecionar vídeo(s) solto(s)"
+  },
+  {
+    "id": "pick-files-btn",
+    "file": "app/src/main/java/com/example/cinelocal/ui/components/AddMediaDialog.kt",
+    "pattern": "Selecionar Vídeo(s)",
+    "desc": "Botão Selecionar Vídeo(s)"
+  },
+  {
+    "id": "standalone-save",
+    "file": "app/src/main/java/com/example/cinelocal/data/repository/MediaRepository.kt",
+    "pattern": "addStandaloneVideoFiles",
+    "desc": "Gravação de vídeos soltos na biblioteca"
+  },
+  {
+    "id": "nav-oneline",
+    "file": "app/src/main/java/com/example/cinelocal/MainActivity.kt",
+    "pattern": "softWrap = false",
+    "desc": "Rótulos da barra inferior em uma linha"
+  },
+  {
+    "id": "pc-smb",
+    "file": "app/src/main/java/com/example/cinelocal/MainActivity.kt",
+    "pattern": "openSmbExplorer",
+    "desc": "Computador (PC / rede) como fonte"
+  },
+  {
+    "id": "cast-session-check",
+    "file": "app/src/main/java/com/example/cinelocal/cast/CastManager.kt",
+    "pattern": "fun hasActiveSession",
+    "desc": "Checagem de sessão real do Cast"
+  },
+  {
+    "id": "cast-receiver",
+    "file": "app/src/main/java/com/example/cinelocal/cast/CastOptionsProvider.kt",
+    "pattern": "DEFAULT_MEDIA_RECEIVER_APPLICATION_ID",
+    "desc": "Receptor padrão do Cast"
+  },
+  {
+    "id": "cast-proxy",
+    "file": "app/src/main/java/com/example/cinelocal/cast/MediaProxyServer.kt",
+    "pattern": "fun registerMedia",
+    "desc": "Servidor HTTP local para o Cast"
+  },
+  {
+    "id": "cast-service",
+    "file": "app/src/main/java/com/example/cinelocal/cast/CastServerService.kt",
+    "pattern": "FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK",
+    "desc": "Serviço em primeiro plano do Cast"
+  },
+  {
+    "id": "cast-diagnostics",
+    "file": "app/src/main/java/com/example/cinelocal/ui/screens/CastDiagnosticsScreen.kt",
+    "pattern": "CastDiagnosticsScreen",
+    "desc": "Tela de diagnóstico do Cast"
+  },
+  {
+    "id": "subtitles-client",
+    "file": "app/src/main/java/com/example/cinelocal/data/subtitles/OpenSubtitlesService.kt",
+    "pattern": "class OpenSubtitlesClient",
+    "desc": "Cliente do OpenSubtitles"
+  }
+]
