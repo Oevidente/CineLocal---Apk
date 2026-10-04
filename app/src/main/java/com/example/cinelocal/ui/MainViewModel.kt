@@ -74,6 +74,10 @@ class MainViewModel(
     private val _openSubtitlesPassword = MutableStateFlow("")
     val openSubtitlesPassword: StateFlow<String> = _openSubtitlesPassword.asStateFlow()
 
+    // Developer Mode
+    private val _isDeveloperModeEnabled = MutableStateFlow(false)
+    val isDeveloperModeEnabled: StateFlow<Boolean> = _isDeveloperModeEnabled.asStateFlow()
+
     init {
         viewModelScope.launch {
             repository.loadInitialDataIfEmpty()
@@ -82,6 +86,15 @@ class MainViewModel(
             _openSubtitlesApiKey.value = repository.getSetting("opensubtitles_api_key").firstOrNull() ?: ""
             _openSubtitlesUsername.value = repository.getSetting("opensubtitles_username").firstOrNull() ?: ""
             _openSubtitlesPassword.value = repository.getSetting("opensubtitles_password").firstOrNull() ?: ""
+            val devModeStr = repository.getSetting("developer_mode_enabled").firstOrNull() ?: "false"
+            _isDeveloperModeEnabled.value = devModeStr == "true"
+        }
+    }
+
+    fun toggleDeveloperMode(enabled: Boolean) {
+        viewModelScope.launch {
+            repository.setSetting("developer_mode_enabled", if (enabled) "true" else "false")
+            _isDeveloperModeEnabled.value = enabled
         }
     }
 

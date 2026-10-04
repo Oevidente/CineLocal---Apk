@@ -86,6 +86,7 @@ import com.example.cinelocal.ui.components.NativeCastButton
 import com.example.cinelocal.ui.components.OpenSubtitlesConfigDialog
 import com.example.cinelocal.ui.components.SmbExplorerDialog
 import com.example.cinelocal.ui.components.TmdbConfigDialog
+import com.example.cinelocal.ui.screens.CastDiagnosticsScreen
 import com.example.cinelocal.ui.screens.ChannelsScreen
 import com.example.cinelocal.ui.screens.FavoritesScreen
 import com.example.cinelocal.ui.screens.HomeScreen
@@ -215,6 +216,7 @@ fun CineLocalApp(
 
     var activeTab by remember { mutableStateOf(AppTab.HOME) }
     var isPlayerActive by remember { mutableStateOf(false) }
+    var showDiagnosticsScreen by remember { mutableStateOf(false) }
     var isSearchExpanded by remember { mutableStateOf(false) }
 
     // Dialogs state
@@ -321,6 +323,7 @@ fun CineLocalApp(
     val openSubtitlesPassword by mainViewModel.openSubtitlesPassword.collectAsStateWithLifecycle()
     val savedNetworkServers by mainViewModel.savedNetworkServers.collectAsStateWithLifecycle()
     val showSmbExplorer by mainViewModel.showSmbExplorer.collectAsStateWithLifecycle()
+    val isDeveloperModeEnabled by mainViewModel.isDeveloperModeEnabled.collectAsStateWithLifecycle()
 
     // Handle One-shot UI Events
     LaunchedEffect(Unit) {
@@ -349,7 +352,12 @@ fun CineLocalApp(
         }
     }
 
-    if (isPlayerActive) {
+    if (showDiagnosticsScreen) {
+        CastDiagnosticsScreen(
+            castManager = playerViewModel.castManager,
+            onBackClick = { showDiagnosticsScreen = false }
+        )
+    } else if (isPlayerActive) {
         PlayerScreen(
             playerViewModel = playerViewModel,
             onBackClick = {
@@ -683,6 +691,9 @@ fun CineLocalApp(
                             openSubtitlesUsername = openSubtitlesUsername,
                             totalMediaCount = allMedia.size,
                             totalChannelCount = iptvChannels.size,
+                            isDeveloperModeEnabled = isDeveloperModeEnabled,
+                            onToggleDeveloperMode = { mainViewModel.toggleDeveloperMode(it) },
+                            onOpenDiagnostics = { showDiagnosticsScreen = true },
                             onOpenTmdbConfig = { showTmdbDialog = true },
                             onOpenOpenSubtitlesConfig = { showOpenSubtitlesDialog = true },
                             onOpenIptvManager = { showIptvDialog = true },

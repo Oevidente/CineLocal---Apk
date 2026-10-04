@@ -20,11 +20,6 @@ object CastMediaResolver {
 
     /**
      * Sanitiza MimeTypes para máxima compatibilidade com o Google Cast Default Media Receiver.
-     * O player padrão do Chromecast (HTML5) aceita:
-     * - video/mp4 (para MP4, MKV, AVI, TS e outros contêineres de vídeo padrão)
-     * - video/webm (para contêineres WebM com VP8/VP9)
-     * - application/x-mpegURL (para transmissões HLS .m3u8)
-     * - application/dash+xml (para transmissões DASH .mpd)
      */
     fun sanitizeMimeForCast(urlOrPath: String, detectedMime: String? = null): String {
         val lower = urlOrPath.lowercase()
@@ -32,7 +27,7 @@ object CastMediaResolver {
             lower.contains(".m3u8") || detectedMime?.contains("mpegurl", ignoreCase = true) == true -> "application/x-mpegURL"
             lower.contains(".mpd") || detectedMime?.contains("dash", ignoreCase = true) == true -> "application/dash+xml"
             lower.endsWith(".webm") || detectedMime?.contains("webm", ignoreCase = true) == true -> "video/webm"
-            else -> "video/mp4" // Mime universal para o receptor HTML5 do Chromecast
+            else -> "video/mp4"
         }
     }
 
@@ -43,7 +38,10 @@ object CastMediaResolver {
         proxyServer: MediaProxyServer
     ): CastResolvedSource? {
         val result = PlaybackSourceResolver.resolve(context, episode, media)
-        if (result !is ResolveResult.Ok) return null
+        if (result !is ResolveResult.Ok) {
+            proxyServer.log("Falha ao resolver fonte de vídeo em PlaybackSourceResolver para o Cast: episodeId=${episode.id}")
+            return null
+        }
         val source = result.source
 
         val uri = source.uri
@@ -54,6 +52,7 @@ object CastMediaResolver {
             if (urlStr.startsWith("http://127.0.0.1", ignoreCase = true) || urlStr.startsWith("http://localhost", ignoreCase = true)) {
                 val wifiIp = proxyServer.getDeviceIpAddress()
                 urlStr = urlStr.replace("127.0.0.1", wifiIp).replace("localhost", wifiIp)
+                proxyServer.log("Substituído endereço de loopback para IP da LAN na URL de streaming: $urlStr")
             }
 
             val mime = sanitizeMimeForCast(urlStr, source.mimeType)
@@ -78,6 +77,25 @@ object CastMediaResolver {
         )
     }
 
+    fun resolveIptvForCast(
+        channelUrl: String,
+        proxyServer: MediaProxyServer
+    ): CastResolvedSource {
+        val trimmed = channelUrl.trim()
+        val mime = sanitizeMimeForCast(trimmed)
+        val proxyUrl = if (trimmed.startsWith("http://", ignoreCase = true)) {
+            proxyServer.registerIptvUrl(trimmed)
+        } else {
+            trimmed
+        }
+        return CastResolvedSource(
+            url = proxyUrl,
+            mimeType = mime,
+            streamType = MediaInfo.STREAM_TYPE_LIVE,
+            isLocal = true
+        )
+    }
+
     private fun detectMimeType(context: Context, uri: Uri): String {
         try {
             val crType = context.contentResolver.getType(uri)
@@ -96,4 +114,3 @@ object CastMediaResolver {
         return fromMap ?: "video/mp4"
     }
 }
-

@@ -426,9 +426,14 @@ class CastManager private constructor(private val context: Context) {
     fun castIptvChannel(channel: IptvChannelEntity, onResult: ((Boolean, String?) -> Unit)? = null) {
         val client = castSession?.remoteMediaClient
         if (client == null) {
-            onResult?.invoke(false, "Nenhuma sessão ativa com o Chromecast")
+            val err = "Nenhuma sessão ativa com o Chromecast"
+            proxyServer.log("Falha ao transmitir IPTV: $err")
+            onResult?.invoke(false, err)
             return
         }
+
+        val resolved = CastMediaResolver.resolveIptvForCast(channel.url, proxyServer)
+        proxyServer.log("Transmitindo canal IPTV '${channel.name}' -> ${resolved.url} (${resolved.mimeType})")
 
         val metadata = MediaMetadata(MediaMetadata.MEDIA_TYPE_TV_SHOW).apply {
             putString(MediaMetadata.KEY_TITLE, channel.name)
@@ -438,11 +443,9 @@ class CastManager private constructor(private val context: Context) {
             }
         }
 
-        val contentType = CastMediaResolver.sanitizeMimeForCast(channel.url)
-
-        val mediaInfo = MediaInfo.Builder(channel.url)
+        val mediaInfo = MediaInfo.Builder(resolved.url)
             .setStreamType(MediaInfo.STREAM_TYPE_LIVE)
-            .setContentType(contentType)
+            .setContentType(resolved.mimeType)
             .setMetadata(metadata)
             .build()
 
@@ -453,6 +456,7 @@ class CastManager private constructor(private val context: Context) {
 
         client.load(request).setResultCallback { result ->
             if (result.status.isSuccess) {
+                proxyServer.log("Comando de carregar canal IPTV aceito pelo Chromecast com sucesso!")
                 _castState.value = _castState.value.copy(
                     title = channel.name,
                     subtitle = channel.group,
@@ -461,7 +465,8 @@ class CastManager private constructor(private val context: Context) {
                 )
                 onResult?.invoke(true, null)
             } else {
-                val errorMsg = "Falha ao carregar canal na TV (Código: ${result.status.statusCode})"
+                val errorMsg = "Falha ao carregar canal na TV (Código: ${result.status.statusCode} ${result.status.statusMessage ?: ""})"
+                proxyServer.log("ERRO CAST: $errorMsg")
                 _castState.value = _castState.value.copy(lastError = errorMsg)
                 onResult?.invoke(false, errorMsg)
             }

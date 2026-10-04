@@ -1,6 +1,6 @@
 {
-  "summary":  "Implementation plan to fix Google Cast streaming for local phone videos, magnet torrents, and IPTV channels, resolve OpenSubtitles download errors, restore TMDb metadata fetching for hero banners, and resolve all high-severity P1/P2 bugs from the QA report.",
-  "updatedAt":  "2026-10-04T16:06:15.827254167Z",
+  "summary":  "Implementation plan for Cast streaming fix on local phone videos, magnet torrents, and IPTV channels, accompanied by a dedicated Developer Mode & Real-Time Cast Diagnostics screen.",
+  "updatedAt":  "2026-10-04T16:56:02.318555403Z",
   "requestFeedback":  true,
   "userFacing":  true
 }

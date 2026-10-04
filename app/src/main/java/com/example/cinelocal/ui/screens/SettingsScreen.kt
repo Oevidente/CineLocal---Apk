@@ -15,15 +15,18 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.BugReport
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Computer
-import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Movie
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Speed
 import androidx.compose.material.icons.filled.Subtitles
+import androidx.compose.material.icons.filled.Terminal
 import androidx.compose.material.icons.filled.Tv
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
@@ -59,6 +62,9 @@ fun SettingsScreen(
     openSubtitlesUsername: String = "",
     totalMediaCount: Int,
     totalChannelCount: Int,
+    isDeveloperModeEnabled: Boolean = false,
+    onToggleDeveloperMode: (Boolean) -> Unit = {},
+    onOpenDiagnostics: () -> Unit = {},
     onOpenTmdbConfig: () -> Unit,
     onOpenOpenSubtitlesConfig: () -> Unit = {},
     onOpenIptvManager: () -> Unit,
@@ -162,6 +168,86 @@ fun SettingsScreen(
                 onClick = onRescanLibrary,
                 testTag = "settings_rescan_item"
             )
+        }
+
+        item {
+            Text(
+                text = "Diagnóstico & Desenvolvedor",
+                style = MaterialTheme.typography.titleMedium,
+                color = CineRed,
+                fontWeight = FontWeight.Bold
+            )
+        }
+
+        item {
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(containerColor = DarkSurface),
+                shape = RoundedCornerShape(10.dp)
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.BugReport,
+                                contentDescription = null,
+                                tint = CineRed,
+                                modifier = Modifier.size(24.dp)
+                            )
+                            Spacer(modifier = Modifier.width(14.dp))
+                            Column {
+                                Text(
+                                    text = "Modo Desenvolvedor",
+                                    style = MaterialTheme.typography.titleSmall,
+                                    color = TextPrimary,
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                                Text(
+                                    text = "Habilita a tela de diagnóstico e logs do servidor HTTP e Cast em tempo real",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = TextSecondary,
+                                    fontSize = 11.sp
+                                )
+                            }
+                        }
+
+                        Switch(
+                            checked = isDeveloperModeEnabled,
+                            onCheckedChange = onToggleDeveloperMode,
+                            colors = SwitchDefaults.colors(
+                                checkedThumbColor = Color.White,
+                                checkedTrackColor = CineRed
+                            )
+                        )
+                    }
+
+                    if (isDeveloperModeEnabled) {
+                        Spacer(modifier = Modifier.height(12.dp))
+                        Button(
+                            onClick = onOpenDiagnostics,
+                            colors = ButtonDefaults.buttonColors(containerColor = CineRed),
+                            shape = RoundedCornerShape(8.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Terminal,
+                                contentDescription = null,
+                                tint = Color.White,
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("Abrir Diagnóstico do Cast & Servidor (Logs)", color = Color.White)
+                        }
+                    }
+                }
+            }
         }
 
         item {
