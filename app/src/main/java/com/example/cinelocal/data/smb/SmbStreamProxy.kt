@@ -135,7 +135,7 @@ object SmbStreamProxy {
                 val parts = requestLine.split(" ")
                 if (parts.size < 2) return
 
-                val method = parts[0]
+                val method = parts[0].uppercase()
                 val uriString = parts[1]
 
                 var rangeHeader: String? = null
@@ -147,8 +147,21 @@ object SmbStreamProxy {
                     line = reader.readLine()
                 }
 
+                if (method == "OPTIONS") {
+                    val preflight = "HTTP/1.1 200 OK\r\n" +
+                        "Access-Control-Allow-Origin: *\r\n" +
+                        "Access-Control-Allow-Methods: GET, HEAD, OPTIONS\r\n" +
+                        "Access-Control-Allow-Headers: Range, Content-Type, Accept, Origin, User-Agent, X-Requested-With, Authorization\r\n" +
+                        "Access-Control-Expose-Headers: Content-Length, Content-Range, Accept-Ranges, Content-Type\r\n" +
+                        "Access-Control-Max-Age: 86400\r\n" +
+                        "Content-Length: 0\r\n\r\n"
+                    out.write(preflight.toByteArray())
+                    out.flush()
+                    return
+                }
+
                 if (!uriString.startsWith("/smb/video")) {
-                    val notFound = "HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\n\r\n"
+                    val notFound = "HTTP/1.1 404 Not Found\r\nAccess-Control-Allow-Origin: *\r\nContent-Length: 0\r\n\r\n"
                     out.write(notFound.toByteArray())
                     out.flush()
                     return
@@ -242,6 +255,10 @@ object SmbStreamProxy {
             headerBuilder.append("Content-Type: $mimeType\r\n")
             headerBuilder.append("Accept-Ranges: bytes\r\n")
             headerBuilder.append("Access-Control-Allow-Origin: *\r\n")
+            headerBuilder.append("Access-Control-Allow-Methods: GET, HEAD, OPTIONS\r\n")
+            headerBuilder.append("Access-Control-Allow-Headers: Range, Content-Type, Accept, Origin, User-Agent, X-Requested-With, Authorization\r\n")
+            headerBuilder.append("Access-Control-Expose-Headers: Content-Length, Content-Range, Accept-Ranges, Content-Type\r\n")
+            headerBuilder.append("Server: CineLocal-SmbProxy/1.6.1\r\n")
 
             if (contentLength > 0) {
                 headerBuilder.append("Content-Length: $contentLength\r\n")
@@ -286,7 +303,7 @@ object SmbStreamProxy {
         val ext = path.substringAfterLast('.', "").lowercase()
         return when (ext) {
             "mp4", "m4v" -> "video/mp4"
-            "mkv" -> "video/x-matroska"
+            "mkv" -> "video/mp4"
             "webm" -> "video/webm"
             "avi" -> "video/x-msvideo"
             "mov" -> "video/quicktime"

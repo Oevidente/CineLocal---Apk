@@ -18,6 +18,24 @@ data class CastResolvedSource(
 
 object CastMediaResolver {
 
+    /**
+     * Sanitiza MimeTypes para máxima compatibilidade com o Google Cast Default Media Receiver.
+     * O player padrão do Chromecast (HTML5) aceita:
+     * - video/mp4 (para MP4, MKV, AVI, TS e outros contêineres de vídeo padrão)
+     * - video/webm (para contêineres WebM com VP8/VP9)
+     * - application/x-mpegURL (para transmissões HLS .m3u8)
+     * - application/dash+xml (para transmissões DASH .mpd)
+     */
+    fun sanitizeMimeForCast(urlOrPath: String, detectedMime: String? = null): String {
+        val lower = urlOrPath.lowercase()
+        return when {
+            lower.contains(".m3u8") || detectedMime?.contains("mpegurl", ignoreCase = true) == true -> "application/x-mpegURL"
+            lower.contains(".mpd") || detectedMime?.contains("dash", ignoreCase = true) == true -> "application/dash+xml"
+            lower.endsWith(".webm") || detectedMime?.contains("webm", ignoreCase = true) == true -> "video/webm"
+            else -> "video/mp4" // Mime universal para o receptor HTML5 do Chromecast
+        }
+    }
+
     fun resolveForCast(
         context: Context,
         episode: EpisodeEntity,
@@ -34,16 +52,11 @@ object CastMediaResolver {
         if (scheme == "http" || scheme == "https") {
             var urlStr = uri.toString()
             if (urlStr.startsWith("http://127.0.0.1", ignoreCase = true) || urlStr.startsWith("http://localhost", ignoreCase = true)) {
-                val wifiIp = com.example.cinelocal.data.torrent.LocalNetworkUtils.getLocalIpAddress(context)
+                val wifiIp = proxyServer.getDeviceIpAddress()
                 urlStr = urlStr.replace("127.0.0.1", wifiIp).replace("localhost", wifiIp)
             }
 
-            val mime = when {
-                urlStr.contains(".m3u8", ignoreCase = true) -> "application/x-mpegURL"
-                urlStr.contains(".mpd", ignoreCase = true) -> "application/dash+xml"
-                urlStr.endsWith(".mkv", ignoreCase = true) -> "video/x-matroska"
-                else -> source.mimeType ?: "video/mp4"
-            }
+            val mime = sanitizeMimeForCast(urlStr, source.mimeType)
             return CastResolvedSource(
                 url = urlStr,
                 mimeType = mime,
@@ -52,15 +65,9 @@ object CastMediaResolver {
             )
         }
 
-
-        // Local URI (content:// ou file://) -> registrar no MediaProxyServer
+        // URI Local (content:// ou file://) -> registrar no MediaProxyServer
         val detectedMime = detectMimeType(context, uri)
-        val castMime = when {
-            detectedMime.contains("matroska", ignoreCase = true) -> "video/x-matroska"
-            detectedMime.contains("webm", ignoreCase = true) -> "video/webm"
-            detectedMime.isBlank() || detectedMime == "application/octet-stream" -> "video/mp4"
-            else -> detectedMime
-        }
+        val castMime = sanitizeMimeForCast(uri.toString(), detectedMime)
         val proxyUrl = proxyServer.registerMedia(uri, castMime)
 
         return CastResolvedSource(
@@ -81,7 +88,7 @@ object CastMediaResolver {
 
         val path = uri.path ?: uri.toString()
         val ext = path.substringAfterLast('.', "").lowercase()
-        if (ext == "mkv") return "video/x-matroska"
+        if (ext == "mkv") return "video/mp4"
         if (ext == "mp4" || ext == "m4v") return "video/mp4"
         if (ext == "webm") return "video/webm"
 
@@ -89,3 +96,4 @@ object CastMediaResolver {
         return fromMap ?: "video/mp4"
     }
 }
+

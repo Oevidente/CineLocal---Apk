@@ -67,12 +67,15 @@ class MediaProxyServer(private val context: Context) {
         val size = calculateFileSize(uri)
         val safeMime = when {
             mimeType.contains("matroska", ignoreCase = true) -> "video/mp4"
+            mimeType.contains("webm", ignoreCase = true) -> "video/webm"
+            mimeType.contains("mpegurl", ignoreCase = true) || mimeType.contains("m3u8", ignoreCase = true) -> "application/x-mpegURL"
             mimeType.isBlank() || mimeType == "application/octet-stream" -> "video/mp4"
             else -> mimeType
         }
         mediaSources[token] = ProxyMediaSource(uri, safeMime, size)
         val ip = getDeviceIpAddress()
-        val url = "http://$ip:$port/m/$token.mp4"
+        val ext = if (safeMime == "video/webm") "webm" else "mp4"
+        val url = "http://$ip:$port/m/$token.$ext"
         log("Mídia registrada: token=$token size=$size url=$url mime=$safeMime")
         return url
     }
@@ -94,13 +97,13 @@ class MediaProxyServer(private val context: Context) {
 
     @Synchronized
     fun ensureStarted() {
-        if (isRunning) return
+        if (isRunning && serverSocket != null && !serverSocket!!.isClosed) return
         start()
     }
 
     @Synchronized
     fun start() {
-        if (isRunning) return
+        if (isRunning && serverSocket != null && !serverSocket!!.isClosed) return
         try {
             serverSocket = ServerSocket(port)
             isRunning = true
@@ -121,6 +124,7 @@ class MediaProxyServer(private val context: Context) {
     }
 
     private fun listenOnSocket() {
+        serverJob?.cancel()
         serverJob = scope.launch {
             while (isActive && isRunning) {
                 try {
@@ -152,47 +156,58 @@ class MediaProxyServer(private val context: Context) {
         try {
             val cm = context.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager
             if (cm != null) {
-                val activeNetwork = cm.activeNetwork
-                val caps = cm.getNetworkCapabilities(activeNetwork)
-                if (caps != null && (caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) ||
-                            caps.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET) ||
-                            caps.hasTransport(NetworkCapabilities.TRANSPORT_VPN))
-                ) {
-                    val linkProps = cm.getLinkProperties(activeNetwork)
-                    val ipv4 = linkProps?.linkAddresses?.mapNotNull { it.address as? Inet4Address }
-                        ?.firstOrNull { !it.isLoopbackAddress && !it.hostAddress.isNullOrBlank() && !it.hostAddress!!.startsWith("127.") }
-                    if (ipv4 != null) {
-                        return ipv4.hostAddress ?: "127.0.0.1"
-                    }
-                }
-            }
-
-            // Fallback: inspecionar interfaces de rede locais procurando IP privado de rede local
-            val interfaces = Collections.list(NetworkInterface.getNetworkInterfaces())
-            val candidateAddrs = mutableListOf<Inet4Address>()
-
-            for (intf in interfaces) {
-                if (intf.isLoopback || !intf.isUp) continue
-                for (addr in Collections.list(intf.inetAddresses)) {
-                    if (addr is Inet4Address && !addr.isLoopbackAddress) {
-                        val host = addr.hostAddress ?: ""
-                        if (!host.startsWith("127.") && !host.startsWith("169.254.")) {
-                            candidateAddrs.add(addr)
+                // Inspecionar rede ativa com preferência para Wi-Fi ou Ethernet
+                val allNets = cm.allNetworks
+                for (net in allNets) {
+                    val caps = cm.getNetworkCapabilities(net)
+                    if (caps != null && (caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) ||
+                                caps.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET))
+                    ) {
+                        val linkProps = cm.getLinkProperties(net)
+                        val ipv4 = linkProps?.linkAddresses?.mapNotNull { it.address as? Inet4Address }
+                            ?.firstOrNull { !it.isLoopbackAddress && it.isSiteLocalAddress && !it.hostAddress.isNullOrBlank() }
+                        if (ipv4 != null) {
+                            return ipv4.hostAddress ?: "127.0.0.1"
                         }
                     }
                 }
             }
 
-            // Prioridade 1: site-local (192.168.x.x, 10.x.x.x, 172.16-31.x.x)
-            val siteLocal = candidateAddrs.firstOrNull { it.isSiteLocalAddress }
-            if (siteLocal != null) {
-                return siteLocal.hostAddress ?: "127.0.0.1"
+            // Fallback com prioridade explícita para interfaces wlan/eth
+            val interfaces = Collections.list(NetworkInterface.getNetworkInterfaces())
+            val sortedIntfs = interfaces.sortedWith(compareByDescending {
+                val name = it.name.lowercase()
+                when {
+                    name.startsWith("wlan") -> 3
+                    name.startsWith("eth") || name.startsWith("en") -> 2
+                    name.startsWith("ap") || name.startsWith("p2p") -> 1
+                    else -> 0
+                }
+            })
+
+            for (intf in sortedIntfs) {
+                if (intf.isLoopback || !intf.isUp) continue
+                for (addr in Collections.list(intf.inetAddresses)) {
+                    if (addr is Inet4Address && !addr.isLoopbackAddress) {
+                        val host = addr.hostAddress ?: ""
+                        if (addr.isSiteLocalAddress && !host.startsWith("127.") && !host.startsWith("169.254.")) {
+                            return host
+                        }
+                    }
+                }
             }
 
-            // Prioridade 2: qualquer outro IPv4 válido
-            val anyV4 = candidateAddrs.firstOrNull()
-            if (anyV4 != null) {
-                return anyV4.hostAddress ?: "127.0.0.1"
+            // Fallback secundário
+            for (intf in sortedIntfs) {
+                if (intf.isLoopback || !intf.isUp) continue
+                for (addr in Collections.list(intf.inetAddresses)) {
+                    if (addr is Inet4Address && !addr.isLoopbackAddress) {
+                        val host = addr.hostAddress ?: ""
+                        if (!host.startsWith("127.") && !host.startsWith("169.254.")) {
+                            return host
+                        }
+                    }
+                }
             }
         } catch (e: Exception) {
             log("Erro ao obter IP da rede local: ${e.message}")
@@ -234,7 +249,7 @@ class MediaProxyServer(private val context: Context) {
                     }
                     path.startsWith("/s/") -> {
                         val token = path.removePrefix("/s/").substringBefore(".").substringBefore("?")
-                        serveSubtitle(out, token)
+                        serveSubtitle(out, token, method)
                     }
                     else -> {
                         sendNotFound(out)
@@ -250,7 +265,8 @@ class MediaProxyServer(private val context: Context) {
         val headers = "HTTP/1.1 200 OK\r\n" +
             "Access-Control-Allow-Origin: *\r\n" +
             "Access-Control-Allow-Methods: GET, HEAD, OPTIONS\r\n" +
-            "Access-Control-Allow-Headers: Range, Content-Type, Accept\r\n" +
+            "Access-Control-Allow-Headers: Range, Content-Type, Accept, Origin, User-Agent, X-Requested-With, Authorization\r\n" +
+            "Access-Control-Expose-Headers: Content-Length, Content-Range, Accept-Ranges, Content-Type\r\n" +
             "Access-Control-Max-Age: 86400\r\n" +
             "Content-Length: 0\r\n\r\n"
         out.write(headers.toByteArray())
@@ -263,7 +279,7 @@ class MediaProxyServer(private val context: Context) {
         out.flush()
     }
 
-    private fun serveSubtitle(out: OutputStream, token: String) {
+    private fun serveSubtitle(out: OutputStream, token: String, method: String) {
         val vtt = subtitleSources[token]
         if (vtt == null) {
             sendNotFound(out)
@@ -275,10 +291,15 @@ class MediaProxyServer(private val context: Context) {
             "Content-Type: text/vtt; charset=utf-8\r\n" +
             "Content-Length: ${bytes.size}\r\n" +
             "Access-Control-Allow-Origin: *\r\n" +
+            "Access-Control-Allow-Methods: GET, HEAD, OPTIONS\r\n" +
+            "Access-Control-Allow-Headers: Range, Content-Type, Accept, Origin, User-Agent, X-Requested-With, Authorization\r\n" +
+            "Access-Control-Expose-Headers: Content-Length, Content-Range, Accept-Ranges, Content-Type\r\n" +
             "Connection: close\r\n\r\n"
 
         out.write(headers.toByteArray())
-        out.write(bytes)
+        if (method != "HEAD") {
+            out.write(bytes)
+        }
         out.flush()
     }
 
@@ -289,7 +310,10 @@ class MediaProxyServer(private val context: Context) {
             return
         }
 
-        val totalLength = source.totalLength
+        // Determina o tamanho dinamicamente caso tenha sido registrado preliminarmente (ex: torrent)
+        val dynamicSize = calculateFileSize(source.uri)
+        val totalLength = if (dynamicSize > 0) dynamicSize else source.totalLength
+
         var start = 0L
         var end = if (totalLength > 0) totalLength - 1 else Long.MAX_VALUE
         var isPartial = false
@@ -315,7 +339,6 @@ class MediaProxyServer(private val context: Context) {
         }
 
         if (totalLength > 0 && start >= totalLength) {
-            // Range Not Satisfiable
             val errorRes = "HTTP/1.1 416 Range Not Satisfiable\r\n" +
                 "Content-Range: bytes */$totalLength\r\n" +
                 "Access-Control-Allow-Origin: *\r\n" +
@@ -337,8 +360,10 @@ class MediaProxyServer(private val context: Context) {
         headerBuilder.append("Content-Type: ${source.mimeType}\r\n")
         headerBuilder.append("Accept-Ranges: bytes\r\n")
         headerBuilder.append("Access-Control-Allow-Origin: *\r\n")
-        headerBuilder.append("Access-Control-Allow-Headers: Range\r\n")
-        headerBuilder.append("Access-Control-Expose-Headers: Content-Length, Content-Range, Accept-Ranges\r\n")
+        headerBuilder.append("Access-Control-Allow-Methods: GET, HEAD, OPTIONS\r\n")
+        headerBuilder.append("Access-Control-Allow-Headers: Range, Content-Type, Accept, Origin, User-Agent, X-Requested-With, Authorization\r\n")
+        headerBuilder.append("Access-Control-Expose-Headers: Content-Length, Content-Range, Accept-Ranges, Content-Type\r\n")
+        headerBuilder.append("Server: CineLocal-MediaProxy/1.6.1\r\n")
 
         if (contentLength > 0) {
             headerBuilder.append("Content-Length: $contentLength\r\n")
@@ -353,7 +378,7 @@ class MediaProxyServer(private val context: Context) {
 
         if (method == "HEAD") return
 
-        // Leitura com Random Access via FileChannel
+        // Leitura e streaming com Random Access otimizado
         streamChannel(source.uri, start, contentLength, out)
     }
 
@@ -397,7 +422,7 @@ class MediaProxyServer(private val context: Context) {
             }
             out.flush()
         } catch (_: Exception) {
-            // Conexão encerrada pelo receptor
+            // Conexão encerrada pelo receptor (Chromecast)
         } finally {
             try { channel?.close() } catch (_: Exception) {}
             try { fis?.close() } catch (_: Exception) {}
@@ -409,14 +434,28 @@ class MediaProxyServer(private val context: Context) {
         var size = -1L
         try {
             if (uri.scheme == "file") {
-                return File(uri.path ?: "").length()
+                val file = File(uri.path ?: "")
+                if (file.exists()) {
+                    val len = file.length()
+                    if (len > 0) return len
+                }
             }
+
+            // Checagem de tamanho de torrent em download se for arquivo no diretório de torrents
+            val torrentStatus = com.example.cinelocal.data.torrent.TorrentStreamEngine.status.value
+            if (torrentStatus.totalSizeBytes > 0 && (uri.path?.contains("torrents") == true || uri.toString().contains("torrents"))) {
+                return torrentStatus.totalSizeBytes
+            }
+
             context.contentResolver.openFileDescriptor(uri, "r")?.use { pfd ->
-                size = pfd.statSize
-                if (size <= 0) {
+                val pfdSize = pfd.statSize
+                if (pfdSize > 0) {
+                    size = pfdSize
+                } else {
                     try {
-                        FileInputStream(pfd.fileDescriptor).use { fis ->
-                            size = fis.channel.size()
+                        FileInputStream(pfd.fileDescriptor).channel.use { ch ->
+                            val chSize = ch.size()
+                            if (chSize > 0) size = chSize
                         }
                     } catch (_: Exception) {}
                 }
@@ -433,3 +472,4 @@ class MediaProxyServer(private val context: Context) {
         return if (size > 0) size else -1L
     }
 }
+

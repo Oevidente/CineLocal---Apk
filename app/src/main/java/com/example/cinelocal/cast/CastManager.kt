@@ -368,9 +368,7 @@ class CastManager private constructor(private val context: Context) {
                     "$mediaTitle - ${episode.title}"
                 )
             } catch (e: Exception) {
-                Log.e("CastManager", "Erro ao iniciar serviço de notificação do Cast", e)
-                onResult?.invoke(false, "Ative as notificações para transmitir arquivos do celular")
-                return
+                Log.w("CastManager", "Aviso ao iniciar serviço de notificação do Cast (continuando transmissão): ${e.message}")
             }
         }
 
@@ -440,7 +438,7 @@ class CastManager private constructor(private val context: Context) {
             }
         }
 
-        val contentType = if (channel.url.contains(".m3u8", ignoreCase = true)) "application/x-mpegURL" else "video/mp4"
+        val contentType = CastMediaResolver.sanitizeMimeForCast(channel.url)
 
         val mediaInfo = MediaInfo.Builder(channel.url)
             .setStreamType(MediaInfo.STREAM_TYPE_LIVE)
