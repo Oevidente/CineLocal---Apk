@@ -1,3 +1,5 @@
+import java.util.Base64
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
@@ -19,8 +21,8 @@ android {
         val sha = System.getenv("GITHUB_SHA")?.take(7) ?: "local"
 
         // versionCode incrementado para permitir atualizações diretas
-        versionCode = if (runNumber != null) 214 + runNumber else 214
-        versionName = "1.6.6"
+        versionCode = if (runNumber != null) 216 + runNumber else 216
+        versionName = "1.6.8"
 
         buildConfigField("String", "GIT_SHA", "\"$sha\"")
         buildConfigField("int", "BUILD_NUMBER", "${runNumber ?: 0}")
@@ -29,13 +31,30 @@ android {
     }
 
     signingConfigs {
+        getByName("debug") {
+            val repoKeystoreBase64 = file("${rootDir}/debug.keystore.base64")
+            val repoKeystore = file("${rootDir}/debug.keystore")
+            if (!repoKeystore.exists() && repoKeystoreBase64.exists()) {
+                try {
+                    val bytes = Base64.getDecoder().decode(repoKeystoreBase64.readText().trim())
+                    repoKeystore.writeBytes(bytes)
+                } catch (_: Exception) {
+                }
+            }
+            if (repoKeystore.exists()) {
+                storeFile = repoKeystore
+                storePassword = "android"
+                keyAlias = "androiddebugkey"
+                keyPassword = "android"
+            }
+        }
         create("ci") {
             val ksPath = System.getenv("KEYSTORE_PATH")
             if (ksPath != null) {
                 storeFile = file(ksPath)
-                storePassword = System.getenv("KEYSTORE_PASSWORD")
-                keyAlias = System.getenv("KEY_ALIAS")
-                keyPassword = System.getenv("KEY_PASSWORD")
+                storePassword = System.getenv("KEYSTORE_PASSWORD") ?: "android"
+                keyAlias = System.getenv("KEY_ALIAS") ?: "androiddebugkey"
+                keyPassword = System.getenv("KEY_PASSWORD") ?: "android"
             }
         }
     }

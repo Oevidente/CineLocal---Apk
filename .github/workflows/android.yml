@@ -46,6 +46,16 @@ jobs:
           if [ -n "$KEYSTORE_BASE64" ]; then
             echo "$KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/cinelocal.jks"
             echo "KEYSTORE_PATH=$RUNNER_TEMP/cinelocal.jks" >> "$GITHUB_ENV"
+            echo "KEYSTORE_PASSWORD=${{ secrets.KEYSTORE_PASSWORD }}" >> "$GITHUB_ENV"
+            echo "KEY_ALIAS=${{ secrets.KEY_ALIAS }}" >> "$GITHUB_ENV"
+            echo "KEY_PASSWORD=${{ secrets.KEY_PASSWORD }}" >> "$GITHUB_ENV"
+          elif [ -f "debug.keystore.base64" ]; then
+            echo "Usando debug.keystore.base64 fixo do repositorio."
+            base64 -d debug.keystore.base64 > "$RUNNER_TEMP/cinelocal.jks"
+            echo "KEYSTORE_PATH=$RUNNER_TEMP/cinelocal.jks" >> "$GITHUB_ENV"
+            echo "KEYSTORE_PASSWORD=android" >> "$GITHUB_ENV"
+            echo "KEY_ALIAS=androiddebugkey" >> "$GITHUB_ENV"
+            echo "KEY_PASSWORD=android" >> "$GITHUB_ENV"
           else
             echo "::warning::Sem KEYSTORE_BASE64: assinando com chave de debug padrao."
           fi

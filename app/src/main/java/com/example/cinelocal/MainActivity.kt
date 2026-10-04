@@ -1,13 +1,20 @@
 package com.example.cinelocal
 
+import android.app.PictureInPictureParams
 import android.content.Intent
+import android.os.Build
 import android.os.Bundle
+import android.util.Log
+import android.util.Rational
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.compose.animation.AnimatedVisibility
@@ -121,6 +128,9 @@ class MainActivity : ComponentActivity() {
     private lateinit var mainViewModel: MainViewModel
     private lateinit var playerViewModel: PlayerViewModel
 
+    var isAppInPipMode by mutableStateOf(false)
+        private set
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
@@ -147,12 +157,53 @@ class MainActivity : ComponentActivity() {
             CineLocalTheme {
                 CineLocalApp(
                     mainViewModel = mainViewModel,
-                    playerViewModel = playerViewModel
+                    playerViewModel = playerViewModel,
+                    isInPipMode = isAppInPipMode,
+                    onEnterPipClick = { triggerEnterPipMode() }
                 )
             }
         }
 
         handleIncomingIntent(intent)
+    }
+
+    fun triggerEnterPipMode() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            try {
+                val params = PictureInPictureParams.Builder()
+                    .setAspectRatio(Rational(16, 9))
+                    .build()
+                enterPictureInPictureMode(params)
+            } catch (e: Exception) {
+                Log.e("MainActivity", "Erro ao entrar em PiP", e)
+            }
+        }
+    }
+
+    override fun onUserLeaveHint() {
+        super.onUserLeaveHint()
+        val isCasting = playerViewModel.castState.value.isConnected
+        val isLocalPlaying = playerViewModel.uiState.value.isPlaying
+        if (!isCasting && isLocalPlaying && Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            triggerEnterPipMode()
+        }
+    }
+
+    override fun onPictureInPictureModeChanged(
+        isInPictureInPictureMode: Boolean,
+        newConfig: android.content.res.Configuration
+    ) {
+        super.onPictureInPictureModeChanged(isInPictureInPictureMode, newConfig)
+        isAppInPipMode = isInPictureInPictureMode
+    }
+
+    override fun onStop() {
+        super.onStop()
+        val isCasting = playerViewModel.castState.value.isConnected
+        if (!isCasting && !isAppInPipMode) {
+            // Se NÃO estiver transmitindo e NÃO estiver em PiP, pausa o player local para economizar bateria
+            playerViewModel.player.pause()
+        }
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -211,7 +262,9 @@ class MainActivity : ComponentActivity() {
 @Composable
 fun CineLocalApp(
     mainViewModel: MainViewModel,
-    playerViewModel: PlayerViewModel
+    playerViewModel: PlayerViewModel,
+    isInPipMode: Boolean = false,
+    onEnterPipClick: () -> Unit = {}
 ) {
     val context = LocalContext.current
 
@@ -361,6 +414,8 @@ fun CineLocalApp(
     } else if (isPlayerActive) {
         PlayerScreen(
             playerViewModel = playerViewModel,
+            isInPipMode = isInPipMode,
+            onEnterPipClick = onEnterPipClick,
             onBackClick = {
                 playerViewModel.player.pause()
                 isPlayerActive = false

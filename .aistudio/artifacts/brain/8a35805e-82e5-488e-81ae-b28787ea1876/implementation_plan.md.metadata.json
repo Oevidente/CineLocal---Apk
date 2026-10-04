@@ -1,6 +1,6 @@
 {
-  "summary":  "Plano de implementação completo para correção de compatibilidade de streaming Cast (HTTP headers, chunks, range requests) e resolução dos itens de QA com fallback amigável no celular.",
-  "updatedAt":  "2026-10-04T18:11:15.680920531Z",
+  "summary":  "Plano para suporte a reprodução Cast contínua em segundo plano (Foreground Service mantido ativo) e modo Picture-in-Picture (PiP) para vídeo local.",
+  "updatedAt":  "2026-10-04T19:00:16.342411286Z",
   "requestFeedback":  true,
   "userFacing":  true
 }

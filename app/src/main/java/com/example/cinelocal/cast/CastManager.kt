@@ -372,6 +372,15 @@ class CastManager private constructor(private val context: Context) {
                     currentPosition = if (currentPos > 0) currentPos else 0,
                     duration = if (duration > 0) duration else 0
                 )
+
+                if (_castState.value.isConnected) {
+                    CastServerService.start(
+                        context,
+                        _castState.value.deviceName ?: "Chromecast",
+                        _castState.value.title.ifBlank { "Reproduzindo na TV" },
+                        isPlaying = isPlaying
+                    )
+                }
             }
         }
     }

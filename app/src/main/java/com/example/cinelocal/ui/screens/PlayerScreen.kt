@@ -33,6 +33,8 @@ import com.example.cinelocal.ui.components.PlayerOverlay
 fun PlayerScreen(
     playerViewModel: PlayerViewModel,
     onBackClick: () -> Unit,
+    isInPipMode: Boolean = false,
+    onEnterPipClick: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
@@ -142,6 +144,8 @@ fun PlayerScreen(
             onRetryClick = { playerViewModel.retryPlayback() },
             onResumeLocally = { playerViewModel.continuePlaybackOnDevice() },
             onDismissCastError = { playerViewModel.dismissCastError() },
+            isInPipMode = isInPipMode,
+            onEnterPipClick = onEnterPipClick,
             modifier = Modifier.fillMaxSize()
         )
 

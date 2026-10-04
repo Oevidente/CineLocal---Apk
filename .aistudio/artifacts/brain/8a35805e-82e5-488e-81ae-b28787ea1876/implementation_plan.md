@@ -1,6 +1,6 @@
-# Correção de Compatibilidade Cast & Otimização do Streaming Local
+# Transmissão Cast Continuada em Segundo Plano & Modo Picture-in-Picture (PiP)
 
-Plano abrangente para sanar a falha de decodificação e interrupção de conexão no Google Cast ao transmitir vídeos locais do dispositivo (MP4/MKV/4K), aprimorando o servidor HTTP de proxy, os cabeçalhos de streaming (`206 Partial Content`, `Keep-Alive`, `Accept-Ranges`), o tratamento de conexões simultâneas de sondagem de metadados pelo Chromecast, e implementando o banner de diagnóstico inteligente com ação imediata para continuar a reprodução localmente no celular.
+Plano de execução para garantir que a transmissão para o Google Cast continue reproduzindo sem pausas quando o aplicativo for minimizado ou o usuário alternar para outros apps, mantendo um serviço em primeiro plano (*Foreground Service*) com controles de notificação, além da implementação do modo Picture-in-Picture (PiP) para o player nativo do smartphone.
 
 ---
 
@@ -8,108 +8,98 @@ Plano abrangente para sanar a falha de decodificação e interrupção de conex�
 
 > [!IMPORTANT]
 > Decisões confirmadas pelo usuário na etapa de alinhamento:
-> - **Otimização de Streaming Cast**: Implementação de headers HTTP completos (`Accept-Ranges`, `Content-Range`, suporte a `Keep-Alive`, chunking assíncrono de 128KB, e resposta rápida a requisições `HEAD`/`OPTIONS`).
-> - **Tratamento de Incompatibilidade de Codec/Resolução**: Quando a TV/Chromecast emitir `IDLE_REASON_ERROR` (ex.: arquivo 4K AVC ou perfil incompatível com o hardware do Chromecast), a aplicação exibirá um banner informativo com detalhes da mídia e botão de 1 toque para **"Assistir no Celular"** mantendo a posição atual do vídeo.
-> - **Abrangência de QA**: Execução de todas as melhorias e correções dos itens de estabilidade do relatório de QA.
+> - **Transmissão Cast em Segundo Plano**: Manter o `CastServerService` e o `MediaProxyServer` rodando como *Foreground Service* dedicado (`mediaPlayback`). Garantir que minimização e troca de app **NÃO** causem pause nem desconexão no Chromecast.
+> - **Notificação de Controle Cast**: Notificação persistente no painel do Android com botões de ação rápidos (*Play/Pause*, *Sair do Cast*).
+> - **Modo Picture-in-Picture (PiP)**: Ativação automática do modo PiP ao minimizar o aplicativo enquanto um vídeo local estiver rodando no celular, além de botão manual de acionamento de PiP nos controles do player.
 
 ---
 
 ## 1. Overview & Core Concept
 
-- **Problema Diagnosticado**: Na tentativa de Cast de vídeo local (`3840x2160 AVC`), o Chromecast efetuou requisições parciais iniciais (15MB transmitidos) e abortou a conexão (`Connection reset` / `IDLE_REASON_ERROR`), pois servidores locais com fechamento prematuro de socket (`Connection: close`) ou falta de persistência em requisições de metadados (caixa `moov`) impedem o demuxer do Chromecast de bufferizar o fluxo. Além disso, dispositivos Chromecast de 1ª a 3ª geração não decodificam AVC 4K, necessitando de fallback claro para o usuário.
-- **Solução Implementada**:
-  1. **Refatoração do `MediaProxyServer` e `LocalStreamServer`**: Suporte a conexões persistentes (`Keep-Alive`), tratamento limpo de probes do Chromecast (requisições de início e fim de arquivo para atoms MP4), buffers assíncronos não bloqueantes e timeouts adaptativos.
-  2. **Detecção e Banner de Diagnóstico Cast**: Componente de feedback proativo que detecta o erro da TV em tempo real, explica o motivo técnico (ex: resolução/codec não suportado pelo receptor) e oferece o botão para reproduzir na tela do smartphone a partir do mesmo minuto/segundo.
-  3. **Resolução de Fontes e MimeTypes**: Refinamento de `CastMediaResolver` para identificar adequadamente codecs, taxas de amostragem de áudio e containers.
+- **Problema 1 (Pausa do Cast ao Minimizar)**: Atualmente, quando o app vai para o segundo plano, os métodos do ciclo de vida da `Activity` ou destruição parcial do player local acionavam pausas indeferidas ou o sistema Android matava o socket do servidor HTTP local (`MediaProxyServer`).
+- **Problema 2 (Navegação Multitarefa no Smartphone)**: Usuários que assistem no próprio celular precisam sair do app para responder mensagens ou navegar sem interromper o vídeo.
+- **Soluções**:
+  1. **Ajuste de Ciclo de Vida do Cast & Foreground Service**: Atualizar `CastServerService` para rodar como Foreground Service com tipo `mediaPlayback` e notificação de mídia rica. Isolar o estado do Cast no `CastManager` para ignorar `onStop` da Activity quando a sessão de Cast estiver ativa.
+  2. **Android Picture-in-Picture (PiP)**: Declarar `android:supportsPictureInPicture="true"` no `AndroidManifest.xml`, configurar `PictureInPictureParams` no `MainActivity`, disparar `enterPictureInPictureMode` em `onUserLeaveHint()` e ocultar overlays de controle durante o modo PiP.
 
 ---
 
 ## 2. User Experience & Visual Design
 
-### Fluxo do Usuário
-1. **Início do Cast**: O usuário seleciona um vídeo do celular ou rede local e toca no botão de Cast.
-2. **Streaming Estável**: O servidor local envia blocos otimizados de dados com suporte a saltos de tempo (seek) instantâneos.
-3. **Detecção de Falha do Receptor**: Caso o receptor físico não suporte a resolução (ex: 4K em Chromecast 1080p) ou o codec de áudio:
-   - A interface do player/home exibe um banner acolhedor no padrão Material Design 3 (cores de aviso `errorContainer`/`onSurfaceVariant`).
-   - Texto claro: *"A TV não conseguiu reproduzir este formato (Vídeo 4K AVC). Deseja continuar assistindo na tela do celular?"*
-   - Botões de ação rápida: **"Reproduzir no Celular"** (abre player imediatamente no timestamp atual) e **"Ver Diagnóstico"** (exibe logs detalhados de rede/mídia).
+### Fluxo do Usuário (Cast em Segundo Plano)
+1. **Início do Cast**: O usuário inicia a transmissão para o Chromecast.
+2. **Minimização**: O usuário minimiza o app ou troca de tela/aplicativo.
+3. **Comportamento Esperado**: A TV continua reproduzindo o vídeo sem qualquer interrupção ou travamento. Uma notificação fixa do CineLocal aparece na barra de status com título da mídia, nome do dispositivo Cast e controles (Play, Pause, Desconectar).
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│ 📺 Falha na reprodução do Chromecast                        │
-│ A TV recusou o vídeo (4K AVC 3840x2160 incompatível no Cast)│
-│                                                             │
-│ [ ▶ Assistir no Celular ]       [ ℹ Ver Detalhes / Logs ]   │
+│ 📺 CineLocal • Transmitindo em Sala de Estar                │
+│ Stranger Things - S01E01                                    │
+│ [ ⏸ Pausar ]             [ ❌ Desconectar ]                  │
 └─────────────────────────────────────────────────────────────┘
 ```
+
+### Fluxo do Usuário (Modo PiP)
+1. **Início da Reprodução Local**: O usuário assiste a um vídeo diretamente na tela do celular.
+2. **Gesto de Início/Home**: O usuário retorna à tela inicial ou troca de app.
+3. **Comportamento Esperado**: A tela do player se reduz suavemente a um quadro flutuante (PiP) no canto da tela, mantendo a proporção do vídeo e ocultando botões de controle para melhor visualização.
 
 ---
 
 ## 3. Principais Decisões Técnicas e Trade-Offs
 
-- **Headers HTTP & Keep-Alive no MediaProxyServer**:
-  - *Abordagem*: Utilizar suporte a `Connection: keep-alive` com `Keep-Alive: timeout=30, max=100`, `Accept-Ranges: bytes`, e entrega contínua com chunks de `128KB` via canais NIO (`FileChannel` e `ParcelFileDescriptor`).
-  - *Por que*: O receiver do Google Cast dispara múltiplos threads HTTP em paralelo (um para validar o cabeçalho `moov` no fim do arquivo e outro para bufferizar os primeiros frames). Fechar a conexão com `Connection: close` quebrava a inicialização do ExoPlayer interno do Chromecast.
-- **Tratamento de Desconexão Normal de Sondagem**:
-  - *Abordagem*: Diferenciar socket reset de sondagem (leitura parcial de metadados) de erros de I/O reais, evitando logs espúrios de erro durante a operação normal do Cast.
-- **Fallback Automático & Contexto de Playback**:
-  - *Abordagem*: Preservar a URI local, o título, legendas e o tempo decorrido no `PlayerViewModel`/`CastManager` para transição suave para o ExoPlayer local caso o usuário decida tocar no celular.
+- **Isolamento de Ciclo de Vida para Cast**:
+  - *Abordagem*: No `MainActivity.kt` e `PlayerViewModel.kt`, impedir chamadas automáticas de `exoPlayer.pause()` em `onStop()` ou `onDispose()` caso `castState.isConnected == true`.
+  - *Por que*: Durante o Cast, a mídia é renderizada pela TV e servida pelo `MediaProxyServer`. A Activity do celular é apenas o controle remoto.
+- **Serviço de Segundo Plano Garantido (`CastServerService`)**:
+  - *Abordagem*: Registrar o serviço no manifesto com `android:foregroundServiceType="mediaPlayback"` e utilizar `startForeground()` imediatamente ao iniciar qualquer stream local para Cast.
+- **Android PiP API**:
+  - *Abordagem*: Utilizar `setPictureInPictureParams` com `Rational(width, height)` do vídeo para proporção adequada no quadro flutuante.
 
 ---
 
 ## 4. Technical Architecture & Data Strategy
 
-### Diagrama de Comunicação do Streaming
+### Diagrama do Fluxo de Segundo Plano & PiP
 
 ```
-┌────────────────────────┐         HTTP GET Range: 0- / Tail
-│   Chromecast Device    │ ◄────────────────────────────────────────┐
-│ (Default MediaReceiver)│ ──────────────────────────────────────┐  │
-└────────────────────────┘         IDLE_REASON_ERROR / Playing   │  │
-                                                                 │  │
-                                                                 ▼  │
-┌───────────────────────────────────────────────────────────────────┴┐
-│ CineLocal App (Android)                                            │
-│                                                                    │
-│  ┌───────────────────────┐         ┌────────────────────────────┐  │
-│  │   CastManager / UI    │ ◄────── │  MediaProxyServer (8899)   │  │
-│  │  - Monitora Status    │         │  - HTTP 206 Partial Content│  │
-│  │  - Banner Diagnóstico │         │  - Keep-Alive & NIO Chunks │  │
-│  │  - Fallback Celular   │         │  - MimeType & CORS Headers │  │
-│  └──────────┬────────────┘         └─────────────┬──────────────┘  │
-│             │                                    │                 │
-│             ▼                                    ▼                 │
-│  ┌───────────────────────┐         ┌────────────────────────────┐  │
-│  │ ExoPlayer (Local)     │         │ Android Storage / SAF      │  │
-│  │ (Reprodução Fallback) │         │ (ParcelFileDescriptor/Uri) │  │
-│  └───────────────────────┘         └────────────────────────────┘  │
-└────────────────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────┐
+│ Android System (Lifecycle & Background)                     │
+└──────────────┬──────────────────────────────┬───────────────┘
+               │ (App minimizado)             │ (Local Video)
+               ▼                              ▼
+┌─────────────────────────────┐  ┌────────────────────────────┐
+│ CastServerService           │  │ MainActivity / ExoPlayer   │
+│ - Foreground Service        │  │ - onUserLeaveHint()        │
+│ - MediaProxyServer Active   │  │ - enterPictureInPictureMode│
+│ - Notificação de Controles  │  │ - Esconde Overlays na UI   │
+└──────────────┬──────────────┘  └────────────────────────────┘
+               │
+               ▼
+┌─────────────────────────────┐
+│ Chromecast Device (TV)      │
+│ (Reprodução contínua 100%)  │
+└─────────────────────────────┘
 ```
 
-### Componentes e Modificações Planejadas
+### Modificações nos Arquivos
 
-1. **`MediaProxyServer.kt`**:
-   - Ajustar cabeçalhos HTTP para incluir `Connection: keep-alive`, `Keep-Alive: timeout=30`, `Accept-Ranges: bytes`, `Content-Length` exato e `Content-Range`.
-   - Gerenciar requisições `HEAD` e `OPTIONS` com retorno imediato sem travar streams.
-   - Reforçar o loop de envio com `FileChannel` para tolerar sondagens rápidas do Chromecast sem interromper a sessão.
-   - Tratamento de timeout e desconexões seguras de clientes.
+1. **`AndroidManifest.xml`**:
+   - Adicionar `android:supportsPictureInPicture="true"` e `android:configChanges="screenSize|smallestScreenSize|screenLayout|orientation"` na `MainActivity`.
+   - Garantir declaração da permissão `FOREGROUND_SERVICE_MEDIA_PLAYBACK`.
 
-2. **`CastMediaResolver.kt`**:
-   - Detecção precisa de MIME type com priorização correta para `video/mp4`, `video/x-matroska`, e `application/x-mpegURL`.
-   - Logging enriquecido dos formatos de áudio/vídeo para diagnóstico facilitado na UI.
+2. **`CastServerService.kt`**:
+   - Adicionar ações de Intent na notificação (`ACTION_PLAY_PAUSE`, `ACTION_STOP_CAST`).
+   - Manter notificação atualizada com estado de reprodução e metadados.
 
-3. **`CastManager.kt`**:
-   - Capturar o evento `IDLE_REASON_ERROR` e emitir estado de falha formatado (`CastPlaybackError`) contendo os metadados do episódio/mídia atual, posição salva e causa provável.
-   - Fornecer callback/método `resumeLocally(context)` para abrir o player nativo na mesma posição.
+3. **`MainActivity.kt`**:
+   - Implementar `onUserLeaveHint()` para entrar em PiP se um vídeo local estiver ativo (`!castState.isConnected && isPlayerActive && isPlaying`).
+   - Tratar `onPictureInPictureModeChanged()` para passar o estado `isInPictureInPictureMode` para o `PlayerScreen`.
+   - Garantir que `onStop()` não interrompa a sessão do Cast.
 
-4. **`PlayerScreen.kt` / `HomeScreen.kt` / Componentes UI**:
-   - Adicionar o banner/dialog de recuperação de reprodução remota quando o Cast falhar.
-   - Incrementar número de versão conforme diretrizes do projeto.
+4. **`PlayerOverlay.kt` / `PlayerScreen.kt`**:
+   - Adicionar botão de PiP na barra de controles do player.
+   - Ocultar botões, barra de progresso e gradientes de fundo no modo PiP.
 
----
-
-## 5. Plano de Verificação
-
-1. **Compilação**: Executar `compile_applet` para validar integridade sintática e de tipos.
-2. **Testes Unitários**: Executar testes de unidade existentes (`PlaybackSourceResolverTest`, `CastHlsAndTorrentTest`) e adicionar testes para validar os novos headers e comportamento do proxy.
-3. **Validação de Fluxos**: Garantir que as requisições de stream respondem com código HTTP 206 e os cabeçalhos esperados pelo receptor Cast.
+5. **Incremento de Versão**:
+   - Atualizar `versionCode` para `215` e `versionName` para `1.6.7` em `build.gradle.kts`, `package.json` e `index.html`.

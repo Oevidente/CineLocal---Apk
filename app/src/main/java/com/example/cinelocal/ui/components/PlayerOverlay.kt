@@ -94,6 +94,8 @@ import com.example.cinelocal.ui.theme.TextSecondary
 import kotlinx.coroutines.delay
 import java.io.File
 
+import androidx.compose.material.icons.filled.PictureInPictureAlt
+
 @Composable
 fun PlayerOverlay(
     uiState: PlayerUiState,
@@ -103,6 +105,7 @@ fun PlayerOverlay(
     openSubtitlesPassword: String = "",
     downloadedSubtitles: List<com.example.cinelocal.data.model.SubtitleFileEntity> = emptyList(),
     videoUri: android.net.Uri? = null,
+    isInPipMode: Boolean = false,
     onBackClick: () -> Unit,
     onPlayPauseClick: () -> Unit,
     onSeekBack: () -> Unit,
@@ -129,8 +132,13 @@ fun PlayerOverlay(
     onResumeLocally: () -> Unit = {},
     onDismissCastError: () -> Unit = {},
     onOpenDiagnostics: () -> Unit = {},
+    onEnterPipClick: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
+    if (isInPipMode) {
+        // Encontra-se em PiP mini janela: esconde totalmente controles e gradientes
+        return
+    }
     var areControlsVisible by remember { mutableStateOf(true) }
     var showSpeedMenu by remember { mutableStateOf(false) }
     var showAudioDialog by remember { mutableStateOf(false) }
@@ -465,6 +473,17 @@ fun PlayerOverlay(
 
                         // Aspect Ratio button
                         if (!castState.isConnected) {
+                            IconButton(
+                                onClick = onEnterPipClick,
+                                modifier = Modifier.testTag("pip_mode_button")
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.PictureInPictureAlt,
+                                    contentDescription = "Modo PiP",
+                                    tint = Color.White
+                                )
+                            }
+
                             IconButton(onClick = onResizeModeCycle) {
                                 Icon(
                                     imageVector = Icons.Default.AspectRatio,
