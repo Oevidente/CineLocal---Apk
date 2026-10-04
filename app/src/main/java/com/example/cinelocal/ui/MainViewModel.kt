@@ -21,7 +21,9 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
+import java.util.UUID
 
 sealed class UiEvent {
     data class ShowToast(val message: String) : UiEvent()
@@ -199,8 +201,11 @@ class MainViewModel(
         _selectedIptvGroup.value = group
     }
 
+    private var selectJob: Job? = null
+
     fun selectMedia(mediaItem: MediaItemEntity) {
-        viewModelScope.launch {
+        selectJob?.cancel()
+        selectJob = viewModelScope.launch {
             repository.getMediaWithEpisodes(mediaItem.id).collect {
                 _selectedMediaWithEpisodes.value = it
             }
@@ -208,6 +213,7 @@ class MainViewModel(
     }
 
     fun clearSelectedMedia() {
+        selectJob?.cancel()
         _selectedMediaWithEpisodes.value = null
     }
 
@@ -236,10 +242,36 @@ class MainViewModel(
             _isLoading.value = true
             try {
                 val media = repository.addFolderByUri(uri, customTitle)
-                _uiEvents.emit(UiEvent.ShowToast("Pasta adicionada: ${media.title}"))
-                selectMedia(media)
+                if (media != null) {
+                    _uiEvents.emit(UiEvent.ShowToast("Vídeos da pasta importados com sucesso!"))
+                    selectMedia(media)
+                } else {
+                    _uiEvents.emit(UiEvent.ShowToast("Nenhum vídeo compatível encontrado na pasta selecionada."))
+                }
             } catch (e: Exception) {
                 _uiEvents.emit(UiEvent.ShowToast("Erro: ${e.localizedMessage}"))
+            } finally {
+                _isLoading.value = false
+            }
+        }
+    }
+
+    fun playExternalVideoUri(uri: Uri, displayName: String) {
+        viewModelScope.launch {
+            _isLoading.value = true
+            try {
+                val media = repository.addExternalVideo(uri, displayName)
+                val ep = EpisodeEntity(
+                    id = UUID.randomUUID().toString(),
+                    mediaId = media.id,
+                    seasonNumber = 0,
+                    episodeNumber = 1,
+                    title = displayName,
+                    uriString = uri.toString()
+                )
+                _uiEvents.emit(UiEvent.OpenPlayer(ep, media.title, listOf(ep)))
+            } catch (e: Exception) {
+                _uiEvents.emit(UiEvent.ShowToast("Erro ao abrir vídeo externo: ${e.localizedMessage}"))
             } finally {
                 _isLoading.value = false
             }
@@ -346,8 +378,8 @@ class MainViewModel(
         viewModelScope.launch {
             _isLoading.value = true
             try {
-                repository.rescanAll()
-                _uiEvents.emit(UiEvent.ShowToast("Biblioteca atualizada!"))
+                val updatedCount = repository.rescanAll(getApplication())
+                _uiEvents.emit(UiEvent.ShowToast("Biblioteca atualizada ($updatedCount item/itens novos sincronizados)!"))
             } catch (e: Exception) {
                 _uiEvents.emit(UiEvent.ShowToast("Erro ao atualizar: ${e.localizedMessage}"))
             } finally {

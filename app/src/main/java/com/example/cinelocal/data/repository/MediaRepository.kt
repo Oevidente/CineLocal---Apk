@@ -12,6 +12,7 @@ import com.example.cinelocal.data.model.SettingEntity
 import com.example.cinelocal.data.torrent.TorrentUtils
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.withContext
 import java.io.BufferedReader
@@ -207,17 +208,17 @@ class MediaRepository(
         addedItems
     }
 
-    suspend fun addFolderByUri(uri: Uri, customTitle: String? = null): MediaItemEntity = withContext(Dispatchers.IO) {
+    suspend fun addFolderByUri(uri: Uri, customTitle: String? = null): MediaItemEntity? = withContext(Dispatchers.IO) {
         val folderName = when {
             !customTitle.isNullOrBlank() -> customTitle
             else -> uri.lastPathSegment?.substringAfterLast(':')?.substringAfterLast('/') ?: "Pasta Local"
         }
 
+        val addedMedia = mutableListOf<MediaItemEntity>()
+
         // Se o context estiver disponível, escaneia os vídeos reais da pasta
-        var scannedCount = 0
         if (context != null) {
             val scanned = FolderScanner.scanTree(context.contentResolver, uri)
-            scannedCount = scanned.size
             for (file in scanned) {
                 val parsed = MediaNameParser.parse(file.displayName, file.parentFolder)
                 val mediaId = UUID.randomUUID().toString()
@@ -225,18 +226,19 @@ class MediaRepository(
                 if (parsed.isSeries) {
                     val existing = mediaDao.getAllMediaList().find { it.kind == MediaKind.SERIES && it.title.equals(parsed.title, ignoreCase = true) }
                     val targetMediaId = existing?.id ?: mediaId
+                    val seriesItem = existing ?: MediaItemEntity(
+                        id = targetMediaId,
+                        title = parsed.title,
+                        kind = MediaKind.SERIES,
+                        year = parsed.year,
+                        overview = "Série da pasta ${file.parentFolder ?: folderName}",
+                        uriString = file.uri.toString()
+                    )
                     if (existing == null) {
-                        mediaDao.insertMedia(
-                            MediaItemEntity(
-                                id = targetMediaId,
-                                title = parsed.title,
-                                kind = MediaKind.SERIES,
-                                year = parsed.year,
-                                overview = "Série da pasta ${file.parentFolder ?: folderName}",
-                                uriString = file.uri.toString()
-                            )
-                        )
+                        mediaDao.insertMedia(seriesItem)
                     }
+                    addedMedia.add(seriesItem)
+
                     episodeDao.insertEpisode(
                         EpisodeEntity(
                             mediaId = targetMediaId,
@@ -247,16 +249,15 @@ class MediaRepository(
                         )
                     )
                 } else {
-                    mediaDao.insertMedia(
-                        MediaItemEntity(
-                            id = mediaId,
-                            title = parsed.title,
-                            kind = MediaKind.MOVIE,
-                            year = parsed.year,
-                            overview = "Filme da pasta $folderName.",
-                            uriString = file.uri.toString()
-                        )
+                    val movieItem = MediaItemEntity(
+                        id = mediaId,
+                        title = parsed.title,
+                        kind = MediaKind.MOVIE,
+                        year = parsed.year,
+                        overview = "Filme da pasta $folderName.",
+                        uriString = file.uri.toString()
                     )
+                    mediaDao.insertMedia(movieItem)
                     episodeDao.insertEpisode(
                         EpisodeEntity(
                             mediaId = mediaId,
@@ -266,20 +267,40 @@ class MediaRepository(
                             uriString = file.uri.toString()
                         )
                     )
+                    addedMedia.add(movieItem)
                 }
             }
         }
 
+        // NÃO criar MediaItemEntity representando a própria pasta (QA-002).
+        // Retorna a primeira mídia real escaneada, ou null se a pasta não continha vídeos
+        addedMedia.firstOrNull()
+    }
+
+    suspend fun addExternalVideo(uri: Uri, displayName: String): MediaItemEntity = withContext(Dispatchers.IO) {
+        val existing = mediaDao.getAllMediaList().find { it.uriString == uri.toString() }
+        if (existing != null) return@withContext existing
+
+        val parsed = MediaNameParser.parse(displayName)
         val mediaId = UUID.randomUUID().toString()
         val mediaItem = MediaItemEntity(
             id = mediaId,
-            title = folderName,
-            kind = MediaKind.MOVIE,
-            overview = "Pasta adicionada ($scannedCount vídeos encontrados).",
-            uriString = uri.toString(),
-            filePath = uri.path
+            title = parsed.title,
+            kind = if (parsed.isSeries) MediaKind.SERIES else MediaKind.MOVIE,
+            year = parsed.year,
+            overview = "Arquivo de vídeo externo ($displayName)",
+            uriString = uri.toString()
         )
         mediaDao.insertMedia(mediaItem)
+        val ep = EpisodeEntity(
+            id = UUID.randomUUID().toString(),
+            mediaId = mediaId,
+            seasonNumber = if (parsed.isSeries) parsed.seasonNumber else 0,
+            episodeNumber = if (parsed.isSeries) parsed.episodeNumber else 1,
+            title = parsed.title,
+            uriString = uri.toString()
+        )
+        episodeDao.insertEpisode(ep)
         mediaItem
     }
 
@@ -328,7 +349,7 @@ class MediaRepository(
         mediaDao.insertMedia(mediaItem)
 
         if (detectedSeries) {
-            val episodes = com.example.cinelocal.data.torrent.TorrentLaunchHelper.generateSeasonEpisodes(mediaId, title, magnetUri, 8)
+            val episodes = com.example.cinelocal.data.torrent.TorrentLaunchHelper.generateSeasonEpisodes(mediaId, title, magnetUri)
             episodes.forEach { episodeDao.insertEpisode(it) }
         } else {
             val episode = EpisodeEntity(
@@ -344,21 +365,25 @@ class MediaRepository(
 
 
     suspend fun importIptvFromUrl(url: String, clearExisting: Boolean = false): Int = withContext(Dispatchers.IO) {
-        if (clearExisting) {
-            iptvChannelDao.deleteAllChannels()
+        // Validação e download PRIMEIRO, antes de qualquer alteração no banco (QA-004)
+        val connection = (URL(url).openConnection() as HttpURLConnection).apply {
+            connectTimeout = 10000
+            readTimeout = 12000
+            requestMethod = "GET"
+            setRequestProperty("User-Agent", "CineLocal/1.4.0 (Android)")
         }
-        try {
-            val connection = URL(url).openConnection() as HttpURLConnection
-            connection.connectTimeout = 8000
-            connection.readTimeout = 8000
-            connection.requestMethod = "GET"
 
-            val reader = BufferedReader(InputStreamReader(connection.inputStream))
-            val channels = mutableListOf<IptvChannelEntity>()
-            var currentName = ""
-            var currentGroup = "Geral"
-            var currentLogo: String? = null
+        val responseCode = connection.responseCode
+        if (responseCode !in 200..299) {
+            throw java.io.IOException("Servidor IPTV retornou status HTTP $responseCode")
+        }
 
+        val channels = mutableListOf<IptvChannelEntity>()
+        var currentName = ""
+        var currentGroup = "Geral"
+        var currentLogo: String? = null
+
+        connection.inputStream.bufferedReader().use { reader ->
             reader.forEachLine { line ->
                 val trimmed = line.trim()
                 if (trimmed.startsWith("#EXTINF:", ignoreCase = true)) {
@@ -384,14 +409,18 @@ class MediaRepository(
                     currentLogo = null
                 }
             }
-            reader.close()
-            if (channels.isNotEmpty()) {
-                iptvChannelDao.insertChannels(channels)
-            }
-            channels.size
-        } catch (_: Exception) {
-            0
         }
+
+        if (channels.isEmpty()) {
+            throw IllegalArgumentException("A lista foi baixada, mas nenhum canal válido foi encontrado.")
+        }
+
+        // Apenas após validar e confirmar canais legítimos realizamos a substituição (QA-004)
+        if (clearExisting) {
+            iptvChannelDao.deleteAllChannels()
+        }
+        iptvChannelDao.insertChannels(channels)
+        channels.size
     }
 
     suspend fun addSingleIptvChannel(name: String, url: String, group: String) = withContext(Dispatchers.IO) {
@@ -424,9 +453,195 @@ class MediaRepository(
         settingDao.setSetting(SettingEntity(key, value))
     }
 
+    /**
+     * Carga inicial da biblioteca caso esteja vazia (QA-001)
+     */
     suspend fun loadInitialDataIfEmpty(context: Context? = null) = withContext(Dispatchers.IO) {
+        val ctx = context ?: this@MediaRepository.context
+
+        // Re-escaneia diretórios autorizados pelo usuário se banco de mídia estiver zerado
+        val mediaList = mediaDao.getAllMediaList()
+        if (mediaList.isEmpty() && ctx != null) {
+            rescanAll(ctx)
+        }
+
+        // Se canais IPTV estiverem vazios, cadastra seleção de canais públicos padrão (IPTV-org)
+        val channelCount = iptvChannelDao.getChannelCount()
+        if (channelCount == 0) {
+            val starterChannels = listOf(
+                IptvChannelEntity(
+                    name = "TV Brasil",
+                    group = "Abertos Brasil",
+                    logo = "https://raw.githubusercontent.com/iptv-org/epg/master/logos/TVBrasil.png",
+                    url = "https://tvbrasil-stream.ebc.com.br/hls/tvbrasil/index.m3u8"
+                ),
+                IptvChannelEntity(
+                    name = "TV Cultura",
+                    group = "Abertos Brasil",
+                    logo = "https://raw.githubusercontent.com/iptv-org/epg/master/logos/TVCultura.png",
+                    url = "https://cultura.stream.fabricahost.com.br/cultura/index.m3u8"
+                ),
+                IptvChannelEntity(
+                    name = "Rede Minas",
+                    group = "Abertos Brasil",
+                    logo = "https://raw.githubusercontent.com/iptv-org/epg/master/logos/RedeMinas.png",
+                    url = "https://redeminas-live.fabricahost.com.br/redeminas/index.m3u8"
+                ),
+                IptvChannelEntity(
+                    name = "Euronews Português",
+                    group = "Notícias",
+                    logo = "https://raw.githubusercontent.com/iptv-org/epg/master/logos/EuronewsPortuguese.png",
+                    url = "https://rakuten-euronewspt-1-eu.rakuten.wurl.tv/playlist.m3u8"
+                ),
+                IptvChannelEntity(
+                    name = "NASA TV",
+                    group = "Documentários",
+                    logo = "https://raw.githubusercontent.com/iptv-org/epg/master/logos/NASATVPublic.png",
+                    url = "https://ntv1.akamaized.net/hls/live/2014075/NASA-NTV1-HLS/master.m3u8"
+                )
+            )
+            iptvChannelDao.insertChannels(starterChannels)
+        }
     }
 
-    suspend fun rescanAll(context: Context? = null) = withContext(Dispatchers.IO) {
+    /**
+     * Reescaneamento completo da biblioteca (QA-001):
+     * 1. Remove itens de pastas fantasmas (/tree/)
+     * 2. Re-escaneia pastas autorizadas (SAF persisted permissions)
+     * 3. Compara com itens existentes (deduplicação)
+     * 4. Remove mídias locais cujos arquivos originais foram excluídos do disco
+     */
+    suspend fun rescanAll(context: Context? = null): Int = withContext(Dispatchers.IO) {
+        val ctx = context ?: this@MediaRepository.context
+        var itemsAddedOrReconciled = 0
+
+        // 1. Limpeza de mídias inválidas que representavam pastas puras (QA-002)
+        val initialMedia = mediaDao.getAllMediaList()
+        for (item in initialMedia) {
+            val uriStr = item.uriString ?: ""
+            if (uriStr.contains("/tree/") && !uriStr.contains("/document/")) {
+                mediaDao.deleteMediaById(item.id)
+                episodeDao.deleteEpisodesForMedia(item.id)
+            }
+        }
+
+        // 2. Re-escanear pastas autorizadas via SAF
+        if (ctx != null) {
+            val persistedPerms = try {
+                ctx.contentResolver.persistedUriPermissions
+            } catch (_: Exception) {
+                emptyList()
+            }
+
+            for (perm in persistedPerms) {
+                if (perm.isReadPermission && perm.uri.toString().contains("/tree/")) {
+                    try {
+                        val scanned = FolderScanner.scanTree(ctx.contentResolver, perm.uri)
+                        for (file in scanned) {
+                            val parsed = MediaNameParser.parse(file.displayName, file.parentFolder)
+                            val fileUriStr = file.uri.toString()
+
+                            val currentMediaList = mediaDao.getAllMediaList()
+                            if (parsed.isSeries) {
+                                val existingSeries = currentMediaList.find {
+                                    it.kind == MediaKind.SERIES && it.title.equals(parsed.title, ignoreCase = true)
+                                }
+                                val seriesId = existingSeries?.id ?: UUID.randomUUID().toString()
+                                if (existingSeries == null) {
+                                    mediaDao.insertMedia(
+                                        MediaItemEntity(
+                                            id = seriesId,
+                                            title = parsed.title,
+                                            kind = MediaKind.SERIES,
+                                            year = parsed.year,
+                                            overview = "Série da pasta ${file.parentFolder ?: ""}",
+                                            uriString = fileUriStr
+                                        )
+                                    )
+                                }
+
+                                val episodes = episodeDao.getEpisodesForMedia(seriesId).firstOrNull() ?: emptyList()
+                                val epExists = episodes.any {
+                                    (it.seasonNumber == parsed.seasonNumber && it.episodeNumber == parsed.episodeNumber) ||
+                                            it.uriString == fileUriStr
+                                }
+                                if (!epExists) {
+                                    episodeDao.insertEpisode(
+                                        EpisodeEntity(
+                                            mediaId = seriesId,
+                                            seasonNumber = parsed.seasonNumber,
+                                            episodeNumber = parsed.episodeNumber,
+                                            title = "Episódio ${parsed.episodeNumber} - ${file.displayName.substringBeforeLast('.')}",
+                                            uriString = fileUriStr
+                                        )
+                                    )
+                                    itemsAddedOrReconciled++
+                                }
+                            } else {
+                                val movieExists = currentMediaList.any {
+                                    it.kind == MediaKind.MOVIE && (it.uriString == fileUriStr || it.title.equals(parsed.title, ignoreCase = true))
+                                }
+                                if (!movieExists) {
+                                    val movieId = UUID.randomUUID().toString()
+                                    val movieItem = MediaItemEntity(
+                                        id = movieId,
+                                        title = parsed.title,
+                                        kind = MediaKind.MOVIE,
+                                        year = parsed.year,
+                                        overview = "Filme local (${file.displayName})",
+                                        uriString = fileUriStr
+                                    )
+                                    mediaDao.insertMedia(movieItem)
+                                    episodeDao.insertEpisode(
+                                        EpisodeEntity(
+                                            mediaId = movieId,
+                                            seasonNumber = 0,
+                                            episodeNumber = 1,
+                                            title = parsed.title,
+                                            uriString = fileUriStr
+                                        )
+                                    )
+                                    itemsAddedOrReconciled++
+                                }
+                            }
+                        }
+                    } catch (e: Exception) {
+                        android.util.Log.w("MediaRepository", "Erro ao reescanear pasta: ${perm.uri}", e)
+                    }
+                }
+            }
+
+            // 3. Reconciliar itens locais deletados fora do app
+            val mediaAfterScan = mediaDao.getAllMediaList()
+            for (media in mediaAfterScan) {
+                if (media.kind == MediaKind.MOVIE) {
+                    val filePath = media.filePath
+                    val uriStr = media.uriString
+
+                    var stillExists = true
+                    if (!filePath.isNullOrBlank() && filePath.startsWith("/")) {
+                        stillExists = java.io.File(filePath).exists()
+                    } else if (!uriStr.isNullOrBlank() && uriStr.startsWith("content://")) {
+                        try {
+                            val cursor = ctx.contentResolver.query(
+                                Uri.parse(uriStr),
+                                arrayOf(OpenableColumns.DISPLAY_NAME),
+                                null, null, null
+                            )
+                            stillExists = cursor?.use { it.moveToFirst() } == true
+                        } catch (_: Exception) {
+                            stillExists = false
+                        }
+                    }
+
+                    if (!stillExists) {
+                        mediaDao.deleteMediaById(media.id)
+                        episodeDao.deleteEpisodesForMedia(media.id)
+                    }
+                }
+            }
+        }
+
+        itemsAddedOrReconciled
     }
 }

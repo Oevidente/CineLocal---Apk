@@ -23,6 +23,9 @@ import java.net.URLDecoder
 import java.net.URLEncoder
 import java.util.EnumSet
 
+import java.util.UUID
+import java.util.concurrent.ConcurrentHashMap
+
 object SmbStreamProxy {
 
     private const val TAG = "SmbStreamProxy"
@@ -35,6 +38,16 @@ object SmbStreamProxy {
     @Volatile
     var isRunning = false
         private set
+
+    // Armazenamento em memória de tickets de streaming com credenciais SMB opacas (QA-005)
+    data class StreamTicket(
+        val config: SmbConnectionConfig,
+        val shareName: String,
+        val filePath: String,
+        val createdAt: Long = System.currentTimeMillis()
+    )
+
+    private val tickets = ConcurrentHashMap<String, StreamTicket>()
 
     fun start() {
         if (isRunning) return
@@ -85,10 +98,12 @@ object SmbStreamProxy {
             serverSocket?.close()
         } catch (_: Exception) {}
         serverSocket = null
+        tickets.clear()
     }
 
     /**
-     * Cria uma URL HTTP local reproduzível pelo ExoPlayer / Cast para um arquivo SMB
+     * Cria uma URL HTTP local reproduzível usando apenas um ticket aleatório opaco.
+     * NENHUMA credencial (usuário, senha, domínio) é colocada na URL (QA-005).
      */
     fun createProxyUrl(
         config: SmbConnectionConfig,
@@ -96,15 +111,18 @@ object SmbStreamProxy {
         filePath: String
     ): String {
         start()
-        val hostEnc = URLEncoder.encode(config.host, "UTF-8")
-        val shareEnc = URLEncoder.encode(shareName, "UTF-8")
-        val pathEnc = URLEncoder.encode(filePath, "UTF-8")
-        val userEnc = URLEncoder.encode(config.username, "UTF-8")
-        val passEnc = URLEncoder.encode(config.password, "UTF-8")
-        val domainEnc = URLEncoder.encode(config.domain, "UTF-8")
-        val isAnon = if (config.isAnonymous) "1" else "0"
+        cleanOldTickets()
+        val ticketId = UUID.randomUUID().toString()
+        tickets[ticketId] = StreamTicket(config, shareName, filePath)
+        return "http://127.0.0.1:$proxyPort/smb/video?t=$ticketId"
+    }
 
-        return "http://127.0.0.1:$proxyPort/smb/video?h=$hostEnc&p=${config.port}&s=$shareEnc&f=$pathEnc&u=$userEnc&pwd=$passEnc&d=$domainEnc&a=$isAnon"
+    private fun cleanOldTickets() {
+        if (tickets.size > 200) {
+            val now = System.currentTimeMillis()
+            val expiry = 24 * 3600 * 1000L // 24h
+            tickets.entries.removeIf { now - it.value.createdAt > expiry }
+        }
     }
 
     private fun handleClient(socket: Socket) {
@@ -150,23 +168,34 @@ object SmbStreamProxy {
         rangeHeader: String?
     ) {
         val uri = Uri.parse("http://localhost$requestUri")
-        val host = uri.getQueryParameter("h") ?: return
-        val port = uri.getQueryParameter("p")?.toIntOrNull() ?: 445
-        val shareName = uri.getQueryParameter("s") ?: return
-        val filePath = uri.getQueryParameter("f") ?: return
-        val username = uri.getQueryParameter("u") ?: ""
-        val password = uri.getQueryParameter("pwd") ?: ""
-        val domain = uri.getQueryParameter("d") ?: ""
-        val isAnonymous = uri.getQueryParameter("a") == "1" || username.isBlank()
+        val ticketId = uri.getQueryParameter("t")
+        val ticket = if (ticketId != null) tickets[ticketId] else null
 
-        val config = SmbConnectionConfig(
-            host = host,
-            port = port,
-            username = username,
-            password = password,
-            domain = domain,
-            isAnonymous = isAnonymous
-        )
+        val (config, shareName, filePath) = if (ticket != null) {
+            Triple(ticket.config, ticket.shareName, ticket.filePath)
+        } else {
+            // Suporte legado se parâmetros antigos forem recebidos
+            val host = uri.getQueryParameter("h") ?: return
+            val port = uri.getQueryParameter("p")?.toIntOrNull() ?: 445
+            val s = uri.getQueryParameter("s") ?: return
+            val f = uri.getQueryParameter("f") ?: return
+            val username = uri.getQueryParameter("u") ?: ""
+            val password = uri.getQueryParameter("pwd") ?: ""
+            val domain = uri.getQueryParameter("d") ?: ""
+            val isAnonymous = uri.getQueryParameter("a") == "1" || username.isBlank()
+            Triple(
+                SmbConnectionConfig(
+                    host = host,
+                    port = port,
+                    username = username,
+                    password = password,
+                    domain = domain,
+                    isAnonymous = isAnonymous
+                ),
+                s,
+                f
+            )
+        }
 
         var session: com.hierynomus.smbj.session.Session? = null
         var share: DiskShare? = null

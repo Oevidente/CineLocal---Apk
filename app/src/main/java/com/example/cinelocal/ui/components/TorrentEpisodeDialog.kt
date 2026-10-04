@@ -186,7 +186,7 @@ fun TorrentEpisodeDialog(
                     verticalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
                     val displayEpisodes = if (episodes.isNotEmpty()) episodes else {
-                        TorrentLaunchHelper.generateSeasonEpisodes(media.id, media.title, magnetUri, 8)
+                        TorrentLaunchHelper.generateSeasonEpisodes(media.id, media.title, magnetUri)
                     }
 
                     items(displayEpisodes) { ep ->

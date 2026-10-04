@@ -135,6 +135,53 @@ class MainActivity : ComponentActivity() {
                 )
             }
         }
+
+        handleIncomingIntent(intent)
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        handleIncomingIntent(intent)
+    }
+
+    private fun handleIncomingIntent(intent: Intent?) {
+        if (intent == null) return
+        val action = intent.action
+        val uri = intent.data
+        if ((action == Intent.ACTION_VIEW || action == Intent.ACTION_SEND) && uri != null) {
+            try {
+                contentResolver.takePersistableUriPermission(
+                    uri,
+                    Intent.FLAG_GRANT_READ_URI_PERMISSION
+                )
+            } catch (_: Exception) {}
+
+            val name = queryDisplayName(uri) ?: uri.lastPathSegment ?: "Vídeo Externo"
+            mainViewModel.playExternalVideoUri(uri, name)
+        }
+    }
+
+    private fun queryDisplayName(uri: android.net.Uri): String? {
+        if (uri.scheme == "file") {
+            return uri.lastPathSegment
+        }
+        return try {
+            contentResolver.query(
+                uri,
+                arrayOf(android.provider.OpenableColumns.DISPLAY_NAME),
+                null,
+                null,
+                null
+            )?.use { cursor ->
+                if (cursor.moveToFirst()) {
+                    val idx = cursor.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME)
+                    if (idx >= 0) cursor.getString(idx) else null
+                } else null
+            }
+        } catch (_: Exception) {
+            uri.lastPathSegment
+        }
     }
 
     override fun onDestroy() {

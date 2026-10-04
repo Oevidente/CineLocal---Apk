@@ -261,7 +261,8 @@ class PlayerViewModel(
                             appendLine("Mensagem: ${error.message}")
                         }
 
-                        android.util.Log.e("Player", "${error.errorCodeName} src=$currentSourceUri", error)
+                        val sanitizedUri = sanitizeUrl(currentSourceUri?.toString() ?: "")
+                        android.util.Log.e("Player", "${error.errorCodeName} src=$sanitizedUri", error)
 
                         _uiState.value = _uiState.value.copy(
                             errorMessage = userMessage,

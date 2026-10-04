@@ -19,6 +19,9 @@ interface IptvChannelDao {
     @Query("SELECT * FROM iptv_channels WHERE id = :id")
     suspend fun getChannelById(id: String): IptvChannelEntity?
 
+    @Query("SELECT COUNT(*) FROM iptv_channels")
+    suspend fun getChannelCount(): Int
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertChannel(channel: IptvChannelEntity)
 
