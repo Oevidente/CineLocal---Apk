@@ -57,7 +57,7 @@ class MediaProxyServer(private val context: Context) {
     fun log(msg: String) {
         Log.d("MediaProxyServer", msg)
         synchronized(recentLogs) {
-            if (recentLogs.size >= 100) recentLogs.removeAt(0)
+            if (recentLogs.size >= 120) recentLogs.removeAt(0)
             val timeStr = java.text.SimpleDateFormat("HH:mm:ss", java.util.Locale.getDefault()).format(java.util.Date())
             recentLogs.add("[$timeStr] $msg")
         }
@@ -71,16 +71,21 @@ class MediaProxyServer(private val context: Context) {
         ensureStarted()
         val token = UUID.randomUUID().toString().replace("-", "").take(16)
         val size = calculateFileSize(uri)
+        val uriStr = uri.toString()
         val safeMime = when {
-            mimeType.contains("matroska", ignoreCase = true) -> "video/mp4"
-            mimeType.contains("webm", ignoreCase = true) -> "video/webm"
+            mimeType.contains("matroska", ignoreCase = true) || uriStr.endsWith(".mkv", ignoreCase = true) -> "video/x-matroska"
+            mimeType.contains("webm", ignoreCase = true) || uriStr.endsWith(".webm", ignoreCase = true) -> "video/webm"
             mimeType.contains("mpegurl", ignoreCase = true) || mimeType.contains("m3u8", ignoreCase = true) -> "application/x-mpegURL"
             mimeType.isBlank() || mimeType == "application/octet-stream" -> "video/mp4"
             else -> mimeType
         }
         mediaSources[token] = ProxyMediaSource(uri, safeMime, size)
         val ip = getDeviceIpAddress()
-        val ext = if (safeMime == "video/webm") "webm" else "mp4"
+        val ext = when {
+            safeMime.contains("matroska") -> "mkv"
+            safeMime.contains("webm") -> "webm"
+            else -> "mp4"
+        }
         val url = "http://$ip:$port/m/$token.$ext"
         log("Mídia registrada: token=$token URI=$uri size=$size mime=$safeMime -> URL=$url")
         return url
@@ -219,8 +224,6 @@ class MediaProxyServer(private val context: Context) {
                     line = reader.readLine()
                 }
 
-                log("Requisição HTTP recebida [$clientIp]: $method $path (Range: ${rangeHeader ?: "Nenhum"})")
-
                 if (method == "OPTIONS") {
                     sendCorsPreflight(out)
                     return
@@ -250,7 +253,7 @@ class MediaProxyServer(private val context: Context) {
                 }
             }
         } catch (e: Exception) {
-            log("Conexão encerrada pelo cliente [$clientIp]: ${e.message}")
+            // Sockets normais encerrados pelo receptor
         }
     }
 
@@ -421,7 +424,11 @@ class MediaProxyServer(private val context: Context) {
         out.write(headerBuilder.toString().toByteArray())
         out.flush()
 
-        log("Servindo mídia [$clientIp]: ${source.mimeType} range=$start-$end/$totalLength ($contentLength bytes)")
+        if (totalLength > 0 && start > totalLength / 2) {
+            log("[SONDAGEM MOOV/TAIL] Chromecast buscando metadados no final do arquivo [$clientIp]: range=$start-$end/$totalLength ($contentLength bytes)")
+        } else {
+            log("Servindo mídia [$clientIp]: ${source.mimeType} range=$start-$end/$totalLength ($contentLength bytes)")
+        }
 
         if (method == "HEAD") return
 
@@ -432,6 +439,7 @@ class MediaProxyServer(private val context: Context) {
         var pfd: ParcelFileDescriptor? = null
         var fis: FileInputStream? = null
         var channel: FileChannel? = null
+        var bytesWritten = 0L
 
         try {
             if (uri.scheme == "file") {
@@ -470,10 +478,11 @@ class MediaProxyServer(private val context: Context) {
                                 if (read <= 0) break
                                 out.write(buffer, 0, read)
                                 remaining -= read
+                                bytesWritten += read
                             }
                             out.flush()
                         }
-                        log("[SUCESSO SAF] Mídia transmitida com sucesso via InputStream fallback")
+                        log("[SUCESSO SAF] Mídia transmitida via InputStream fallback ($bytesWritten bytes)")
                     } else {
                         log("[ERRO CRÍTICO SAF] Falha total ao abrir InputStream e FileDescriptor para $uri")
                     }
@@ -503,12 +512,13 @@ class MediaProxyServer(private val context: Context) {
                     buffer.get(tempArray, 0, read)
                     out.write(tempArray, 0, read)
                     bytesRemaining -= read
+                    bytesWritten += read
                 }
                 out.flush()
-                log("[SUCESSO HTTP] Blocos de mídia transmitidos com sucesso")
+                log("[SUCESSO HTTP] Mídia transmitida com sucesso ($bytesWritten bytes)")
             }
         } catch (e: Exception) {
-            log("[FINALIZADO SOKET] Conexão de mídia concluída ou fechada pelo receptor: ${e.message}")
+            log("[SONDAGEM/SEEK REALIZADO] Conexão concluída ou fechada pelo receptor no offset $startPos ($bytesWritten bytes enviados): ${e.message}")
         } finally {
             try { channel?.close() } catch (_: Exception) {}
             try { fis?.close() } catch (_: Exception) {}

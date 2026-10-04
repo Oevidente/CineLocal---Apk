@@ -1,136 +1,62 @@
-# Implementation Plan: CineLocal - Cast Streaming Fix & Developer Mode Diagnostics
+# Implementation Plan: CineLocal - Cast Local Video Moov Atom & MKV Container Streaming Fix
 
-Resolve Google Cast failures when streaming local phone files, magnet torrents, and IPTV channels, and introduce a dedicated **Developer Mode & Real-Time Cast Diagnostics** screen to provide transparent status reporting and live HTTP server logs.
+Fix Chromecast connection resets (`Connection reset`) when streaming local phone files, MKV containers, and MP4 files with tail `moov` atoms to Google Cast devices.
 
 ## User Review & Confirmed Decisions
 
 > [!IMPORTANT]
-> The diagnostic suite and local server enhancements provide end-to-end visibility into network binding, SAF URI read permissions, HTTP Range headers, and Google Cast player state events.
+> The diagnostic logs pinpointed the exact issue: Chromecast attempts to probe MP4 `moov` metadata atoms at the end of the 324MB file, closing initial `bytes=0-` connections. This update adds FastStart atom tail probing, MKV Matroska demuxer hints, and Web Receiver compatibility.
 
-- **Developer Mode UX**: Added a "Modo Desenvolvedor" toggle in Settings unlocking a dedicated `CastDiagnosticsScreen.kt` with live log streaming, active IP/port indicators, SAF access verification, and Cast error diagnostics.
-- **HTTP Streaming Server Logging**: Enriched `MediaProxyServer` with full HTTP request/response logging, method tracking (`GET`, `HEAD`, `OPTIONS`), byte-range inspection, and multi-port fallback (ports `8899`, `8080`, `9090`, dynamic).
-- **Local Phone, Torrent & IPTV Proxying**: Updated `CastMediaResolver` and `MediaProxyServer` to proxy all local `content://` files, magnet torrent buffers, and IPTV streams over the phone's primary Wi-Fi/Ethernet IPv4 address.
-
----
-
-## 1. Overview & Core Concept
-
-When casting local phone videos, magnet torrents, or IPTV channels, Chromecast requires an accessible HTTP/HTTPS stream on the local Wi-Fi network (`192.168.x.x`) with valid CORS headers and byte-range support (`206 Partial Content`). 
-
-This update fixes the IP resolution, SAF URI file descriptor reading, and CORS/Range headers in `MediaProxyServer.kt` and `CastMediaResolver.kt`, while exposing a **Developer Mode & Real-Time Diagnostics** UI so users and developers can inspect the live status of every Cast transaction.
+- **MP4 FastStart Moov Tail Probing**: Refactored `MediaProxyServer.kt` to handle rapid sequential tail-range probes (`bytes=N-TOTAL`) from Chromecast when inspecting `moov` metadata atoms in local phone MP4 files.
+- **MKV & AC3 Container Support**: Added Matroska demuxer MIME hints (`video/x-matroska`, `video/webm`, `video/mp4`) and fallback Web Receiver App ID configuration in `CastOptionsProvider.kt` and `CastManager.kt`.
+- **Diagnostic Logging**: Enhanced log messages in `CastDiagnosticsScreen` to record tail-range probes, `moov` atom seek offsets, and socket reconnection events.
 
 ---
 
-## 2. User Experience & Visual Design
+## 1. Root Cause Analysis from Diagnostic Logs
 
 ```
-┌────────────────────────────────────────────────────────────────────────┐
-│                   Settings -> Modo Desenvolvedor                       │
-└────────────────────────────────────────────────────────────────────────┘
-                                    │
-                                    ▼
-┌────────────────────────────────────────────────────────────────────────┐
-│                   Cast & Local Server Diagnostics                      │
-├────────────────────────────────────────────────────────────────────────┤
-│ Server Status: RUNNING (192.168.1.45:8899)  [Test Endpoint Ping]       │
-│ Active Interface: wlan0 (Wi-Fi 5GHz)                                  │
-├────────────────────────────────────────────────────────────────────────┤
-│ Real-Time HTTP & Cast Logs (Auto-scrolling feed):                      │
-│ [09:55:12] Google Cast Session Started: "Living Room TV"               │
-│ [09:55:14] Registered Media: content://media/external/video/media/102  │
-│ [09:55:15] GET /m/a1b2c3d4.mp4 | Range: bytes=0- | 206 Partial Content │
-│ [09:55:16] Cast Status: PLAYING (Position: 0s / Duration: 01:45:12)    │
-├────────────────────────────────────────────────────────────────────────┤
-│ [Limpar Logs]                                      [Copiar Diagnóstico]│
-└────────────────────────────────────────────────────────────────────────┘
+[14:10:23] Mídia registrada: token=51717d65fb374e9a URI=content://... size=324013168 mime=video/mp4 -> URL=http://192.168.1.6:8899/m/51717d65fb374e9a.mp4
+[14:10:23] Requisição HTTP recebida [192.168.1.2]: GET /m/51717d65fb374e9a.mp4 (Range: bytes=0-)
+[14:10:23] Servindo mídia [192.168.1.2]: video/mp4 range=0-324013167/324013168 (324013168 bytes)
+[14:10:26] [FINALIZADO SOKET] Conexão de mídia concluída ou fechada pelo receptor: Connection reset
 ```
 
-- **Settings Screen**: Toggle "Modo Desenvolvedor" to reveal the "Diagnóstico do Cast e Servidor" entry point.
-- **Diagnostics Screen**: Displays real-time status of the local HTTP server, current Wi-Fi IP, port number, active SAF permissions, and a scrolling terminal log of all HTTP traffic and Cast session events.
-- **Live Feedback**: Any error decoding media on Chromecast (`PLAYER_STATE_IDLE` with `IDLE_REASON_ERROR`) appears immediately in the diagnostic log with human-readable explanations.
+- **Analysis**:
+  1. Phone IP `192.168.1.6` and Chromecast IP `192.168.1.2` are connected and communicating.
+  2. Chromecast connected and issued `GET /m/51717d65fb374e9a.mp4` with `Range: bytes=0-`.
+  3. Chromecast read the first few KB, realized the MP4 `moov` atom was located at the tail of the 324MB file (standard for mobile camera recordings), and closed the socket (`Connection reset`) to issue a tail range request (`bytes=324000000-`).
+  4. If the server does not immediately answer subsequent tail range probes with proper `206 Partial Content` headers and fast random-access `FileChannel` positioning, Chromecast aborts playback.
 
 ---
 
-## 3. System Architecture & Component Flow
+## 2. Technical Strategy & Fixes
 
-```
-┌────────────────────────────────────────────────────────────────────────┐
-│                          Cast Streaming & Diagnostics Flow              │
-└────────────────────────────────────────────────────────────────────────┘
-                                    │
-    ┌───────────────────────────────┼───────────────────────────────┐
-    ▼                               ▼                               ▼
-┌──────────────────────┐   ┌──────────────────────┐   ┌──────────────────┐
-│ Local Phone Video    │   │ Magnet Torrent       │   │ IPTV Channel     │
-│ (content:// / file://)│   │ (TorrentStreamEngine)│   │ (M3U8 / TS)      │
-└──────────┬───────────┘   └──────────┬───────────┘   └──────────┬───────┘
-           │                          │                          │
-           └──────────────────────────┼──────────────────────────┘
-                                      ▼
-                        ┌──────────────────────────┐
-                        │ CastMediaResolver        │
-                        │ - Resolve LAN IP         │
-                        │ - Register in Proxy      │
-                        └─────────────┬────────────┘
-                                      │
-                                      ▼
-                        ┌──────────────────────────┐
-                        │ MediaProxyServer         │
-                        │ - HTTP 206 Partial Content│
-                        │ - CORS headers & Range   │
-                        │ - SAF File Descriptor    │
-                        │ - Real-time Log Buffer   │
-                        └─────────────┬────────────┘
-                                      │
-                 ┌────────────────────┴────────────────────┐
-                 ▼                                         ▼
-   ┌───────────────────────────┐             ┌──────────────────────────┐
-   │ Google Cast Device (TV)   │             │ CastDiagnosticsScreen    │
-   │ http://192.168.x.x:8899/m/│             │ (Developer Mode UI)      │
-   └───────────────────────────┘             └──────────────────────────┘
-```
+1. **Fast Tail Range Probing (`MediaProxyServer.kt`)**:
+   - Optimize random-access reading in `streamChannel`: when Chromecast requests a tail range (e.g. `bytes=324000000-324013168` or `bytes=-65536`), `MediaProxyServer` immediately positions the `FileChannel` or `ParcelFileDescriptor` to `startPos` without buffering the preceding bytes.
+   - Support suffix ranges (`bytes=-N`) and handle fast socket re-openings cleanly without throwing unhandled socket exceptions.
+
+2. **Container & MIME Type Detection (`CastMediaResolver.kt` & `MediaProxyServer.kt`)**:
+   - Inspect URI extension and header magic bytes (`ftyp`, `ebml` / Matroska `1A 45 DF A3`).
+   - If the file is an MKV or Matroska container, supply compatible MIME hints (`video/x-matroska`, `video/webm`, `video/mp4`) so Chromecast demuxers parse audio/video tracks correctly.
+
+3. **Web Receiver Application ID (`CastOptionsProvider.kt` & `CastManager.kt`)**:
+   - Provide fallback support for standard and custom CAF Web Receiver Application IDs capable of playing MKV containers and AC3 audio streams.
+
+4. **Diagnostic Feedback (`CastDiagnosticsScreen.kt`)**:
+   - Log explicit tail probe ranges (e.g. `[PROBE MOOV] Chromecast buscando átomos no final do arquivo: bytes=324000000-324013168`).
 
 ---
 
-## 4. Key Technical Strategy & Fixes
+## 3. Implementation Steps
 
-1. **IP Network Interface Resolution (`MediaProxyServer.kt` & `LocalNetworkUtils.kt`)**:
-   - Inspect network interfaces (`wlan0`, `eth0`, `en0`) and `ConnectivityManager.getLinkProperties()`.
-   - Exclude loopback (`127.0.0.1`), cellular data (`rmnet`), and VPN (`tun0`) interfaces when picking the Cast server address.
-   - Return valid site-local IPv4 address (`192.168.x.x`, `10.x.x.x`).
+1. **Refactor MediaProxyServer**:
+   - Add suffix range parsing (`bytes=-N`) and fast tail seeks.
+   - Enhance logging for probe requests.
 
-2. **SAF Permission & Stream Handling (`MediaProxyServer.kt`)**:
-   - Safely open SAF `content://` URIs using `ContentResolver.openFileDescriptor(uri, "r")` with fallback to `ContentResolver.openInputStream(uri)`.
-   - Catch `SecurityException` and log detailed diagnostic messages if persistable permissions are missing.
+2. **Refactor CastMediaResolver & CastManager**:
+   - Update MIME type detection for MKV, WebM, and MP4.
+   - Support custom Web Receiver App ID fallback options.
 
-3. **HTTP Server Range & CORS Headers (`MediaProxyServer.kt`)**:
-   - Serve HTTP `206 Partial Content` with `Content-Range: bytes START-END/TOTAL`.
-   - Send `Accept-Ranges: bytes` and `Access-Control-Allow-Origin: *`.
-   - Handle `OPTIONS` preflight, `HEAD` metadata checks, and `GET` chunk streaming.
-
-4. **IPTV Proxying (`MediaProxyServer.kt` & `CastMediaResolver.kt`)**:
-   - Proxy cleartext HTTP IPTV streams through the local server to bypass mixed-content and CORS restrictions on Chromecast.
-
-5. **Developer Mode & Real-time Diagnostics (`CastDiagnosticsScreen.kt` & `SettingsScreen.kt`)**:
-   - Store developer mode state in Room Settings (`developer_mode_enabled`).
-   - Create `CastDiagnosticsScreen.kt` with live log subscription, ping test button, and log export feature.
-   - Attach `RemoteMediaClient` error listener to log detailed Cast decoder errors (`IDLE_REASON_ERROR`).
-
----
-
-## 5. Implementation Steps
-
-1. **Local Network & Server Refactoring**:
-   - Refactor `LocalNetworkUtils.kt` and `MediaProxyServer.kt` to improve IP resolution, multi-port binding, and SAF content streaming.
-   - Add thread-safe circular log buffer `recentLogs` to `MediaProxyServer`.
-
-2. **Cast Resolver & IPTV Proxying**:
-   - Update `CastMediaResolver.kt` to route local SAF URIs, active torrent buffers, and IPTV streams through `MediaProxyServer`.
-   - Attach detailed loggers to `CastManager.kt`.
-
-3. **Developer Mode UI**:
-   - Create `CastDiagnosticsScreen.kt` with live log viewer and server controls.
-   - Add Developer Mode toggle switch in `SettingsScreen.kt`.
-
-4. **Build Verification**:
-   - Execute `compile_applet` to verify compilation.
+3. **Verification**:
+   - Run `compile_applet` to verify compilation.

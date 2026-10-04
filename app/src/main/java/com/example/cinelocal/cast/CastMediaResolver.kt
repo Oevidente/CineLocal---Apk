@@ -19,7 +19,8 @@ data class CastResolvedSource(
 object CastMediaResolver {
 
     /**
-     * Sanitiza MimeTypes para máxima compatibilidade com o Google Cast Default Media Receiver.
+     * Sanitiza MimeTypes para máxima compatibilidade com o Google Cast Default Media Receiver
+     * e receptores com suporte a MKV / Matroska demuxer.
      */
     fun sanitizeMimeForCast(urlOrPath: String, detectedMime: String? = null): String {
         val lower = urlOrPath.lowercase()
@@ -27,6 +28,7 @@ object CastMediaResolver {
             lower.contains(".m3u8") || detectedMime?.contains("mpegurl", ignoreCase = true) == true -> "application/x-mpegURL"
             lower.contains(".mpd") || detectedMime?.contains("dash", ignoreCase = true) == true -> "application/dash+xml"
             lower.endsWith(".webm") || detectedMime?.contains("webm", ignoreCase = true) == true -> "video/webm"
+            lower.endsWith(".mkv") || detectedMime?.contains("matroska", ignoreCase = true) == true -> "video/x-matroska"
             else -> "video/mp4"
         }
     }
@@ -106,7 +108,7 @@ object CastMediaResolver {
 
         val path = uri.path ?: uri.toString()
         val ext = path.substringAfterLast('.', "").lowercase()
-        if (ext == "mkv") return "video/mp4"
+        if (ext == "mkv") return "video/x-matroska"
         if (ext == "mp4" || ext == "m4v") return "video/mp4"
         if (ext == "webm") return "video/webm"
 

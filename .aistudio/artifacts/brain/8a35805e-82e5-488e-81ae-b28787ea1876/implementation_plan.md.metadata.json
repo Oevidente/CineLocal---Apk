@@ -1,6 +1,6 @@
 {
-  "summary":  "Implementation plan for Cast streaming fix on local phone videos, magnet torrents, and IPTV channels, accompanied by a dedicated Developer Mode & Real-Time Cast Diagnostics screen.",
-  "updatedAt":  "2026-10-04T16:56:02.318555403Z",
+  "summary":  "Implementation plan to fix Chromecast socket connection resets on local phone videos, MKV containers, and MP4 moov atom probing, and support Web Receiver compatibility.",
+  "updatedAt":  "2026-10-04T17:12:32.352477304Z",
   "requestFeedback":  true,
   "userFacing":  true
 }
