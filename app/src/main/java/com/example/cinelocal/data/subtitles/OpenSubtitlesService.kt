@@ -295,13 +295,13 @@ class OpenSubtitlesClient(private val context: Context) {
                 .header("User-Agent", userAgentString)
                 .build()
 
-            val call = httpClient.newCall(request).execute()
-            if (!call.isSuccessful) {
-                return@withContext OsResult.Error(call.code, "Erro ao baixar arquivo SRT (HTTP ${call.code}).")
+            val srtContent = httpClient.newCall(request).execute().use { response ->
+                if (!response.isSuccessful) {
+                    return@withContext OsResult.Error(response.code, "Erro ao baixar arquivo SRT (HTTP ${response.code}).")
+                }
+                val responseBody = response.body ?: return@withContext OsResult.Error(null, "Corpo do arquivo de legenda vazio.")
+                SubtitleUtils.readStreamWithEncodingFallback(responseBody.byteStream())
             }
-
-            val responseBody = call.body ?: return@withContext OsResult.Error(null, "Corpo do arquivo de legenda vazio.")
-            val srtContent = SubtitleUtils.readStreamWithEncodingFallback(responseBody.byteStream())
 
             // 3. Converter para WebVTT
             val vttContent = SubtitleUtils.convertSrtToVtt(srtContent)

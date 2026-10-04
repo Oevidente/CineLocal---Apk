@@ -19,8 +19,8 @@ android {
         val sha = System.getenv("GITHUB_SHA")?.take(7) ?: "local"
 
         // versionCode incrementado para permitir atualizações diretas
-        versionCode = if (runNumber != null) 207 + runNumber else 207
-        versionName = "1.5.0"
+        versionCode = if (runNumber != null) 208 + runNumber else 208
+        versionName = "1.6.0"
 
         buildConfigField("String", "GIT_SHA", "\"$sha\"")
         buildConfigField("int", "BUILD_NUMBER", "${runNumber ?: 0}")
@@ -42,11 +42,16 @@ android {
 
     buildTypes {
         release {
-            isMinifyEnabled = false
+            isMinifyEnabled = true
+            isShrinkResources = false
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
+            signingConfig = if (System.getenv("KEYSTORE_PATH") != null)
+                signingConfigs.getByName("ci")
+            else
+                signingConfigs.getByName("debug")
         }
         debug {
             signingConfig = if (System.getenv("KEYSTORE_PATH") != null)

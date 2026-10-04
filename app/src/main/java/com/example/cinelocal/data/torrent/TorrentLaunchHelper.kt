@@ -36,8 +36,12 @@ object TorrentLaunchHelper {
 
     fun isSeasonPack(title: String, magnetUri: String): Boolean {
         val lower = "$title $magnetUri".lowercase()
-        val seasonRegex = Regex("""[._\s-]s(\d{1,2})""", RegexOption.IGNORE_CASE)
+        val seasonRegex = Regex("""(?i)[._\s-]s(\d{1,2})""")
+        val tRegex = Regex("""(?i)[._\s-]t(\d{1,2})""")
+        val seasonWordRegex = Regex("""(?i)(?:temporada|season)\s*(\d{1,2})""")
         return seasonRegex.containsMatchIn(lower) ||
+                tRegex.containsMatchIn(lower) ||
+                seasonWordRegex.containsMatchIn(lower) ||
                 lower.contains("temporada") ||
                 lower.contains("season") ||
                 lower.contains("complete") ||
@@ -46,12 +50,17 @@ object TorrentLaunchHelper {
 
     fun parseSeasonNumber(title: String, magnetUri: String): Int {
         val combined = "$title $magnetUri"
-        val matchS = Regex("""[._\s-]S(\d{1,2})[._\s-]?""", RegexOption.IGNORE_CASE).find(combined)
+        val matchS = Regex("""(?i)[._\s-]S(\d{1,2})[._\s-]?""").find(combined)
         if (matchS != null) {
             val num = matchS.groupValues[1].toIntOrNull()
             if (num != null && num > 0) return num
         }
-        val matchWord = Regex("""(?:season|temporada)\s*(\d{1,2})""", RegexOption.IGNORE_CASE).find(combined)
+        val matchT = Regex("""(?i)[._\s-]T(\d{1,2})[._\s-]?""").find(combined)
+        if (matchT != null) {
+            val num = matchT.groupValues[1].toIntOrNull()
+            if (num != null && num > 0) return num
+        }
+        val matchWord = Regex("""(?i)(?:season|temporada)\s*(\d{1,2})""").find(combined)
         if (matchWord != null) {
             val num = matchWord.groupValues[1].toIntOrNull()
             if (num != null && num > 0) return num

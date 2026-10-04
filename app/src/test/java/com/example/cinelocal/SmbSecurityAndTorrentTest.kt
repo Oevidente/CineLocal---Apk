@@ -85,4 +85,42 @@ class SmbSecurityAndTorrentTest {
         assertEquals(2024, parsed.year)
         assertEquals("Filme de Acao", parsed.title)
     }
+
+    @Test
+    fun testSeasonDetectionAboveFive() {
+        // QA-021 verification: Season detection must work for S06, S10, Season 12
+        assertTrue(TorrentLaunchHelper.isSeasonPack("Doctor.Who.S14.1080p", "magnet:?xt=urn:btih:1414"))
+        assertEquals(14, TorrentLaunchHelper.parseSeasonNumber("Doctor.Who.S14.1080p", "magnet:?xt=urn:btih:1414"))
+        assertEquals(10, TorrentLaunchHelper.parseSeasonNumber("Friends Season 10", "magnet:?xt=urn:btih:1010"))
+        assertEquals(8, TorrentLaunchHelper.parseSeasonNumber("Game of Thrones Temporada 8", "magnet:?xt=urn:btih:888"))
+    }
+
+    @Test
+    fun testCredentialEncryptionRoundTrip() {
+        // QA-015 verification: CredentialSecurity encrypt and decrypt round trip
+        val secret = "MinhaSenhaSuperSecreta@2026!"
+        val encrypted = com.example.cinelocal.data.security.CredentialSecurity.encrypt(secret)
+        assertFalse("Encrypted string must not be plaintext", encrypted == secret)
+        val decrypted = com.example.cinelocal.data.security.CredentialSecurity.decrypt(encrypted)
+        assertEquals("Decrypted value must match original secret", secret, decrypted)
+    }
+
+    @Test
+    fun testSrtToVttConversion() {
+        // QA-024 / Subtitle utils verification
+        val sampleSrt = """
+            1
+            00:00:01,000 --> 00:00:04,000
+            Olá mundo, legenda de teste.
+            
+            2
+            00:00:05,500 --> 00:00:08,000
+            Segunda linha de diálogo.
+        """.trimIndent()
+
+        val vtt = com.example.cinelocal.data.subtitles.SubtitleUtils.convertSrtToVtt(sampleSrt)
+        assertTrue(vtt.startsWith("WEBVTT"))
+        assertTrue(vtt.contains("00:00:01.000 --> 00:00:04.000"))
+        assertTrue(vtt.contains("Olá mundo, legenda de teste."))
+    }
 }

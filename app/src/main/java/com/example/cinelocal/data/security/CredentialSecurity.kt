@@ -1,7 +1,7 @@
 package com.example.cinelocal.data.security
 
-import android.util.Base64
 import java.security.KeyStore
+import java.util.Base64
 import javax.crypto.Cipher
 import javax.crypto.KeyGenerator
 import javax.crypto.SecretKey
@@ -28,9 +28,9 @@ object CredentialSecurity {
             val combined = ByteArray(iv.size + cipherText.size)
             System.arraycopy(iv, 0, combined, 0, iv.size)
             System.arraycopy(cipherText, 0, combined, iv.size, cipherText.size)
-            PREFIX + Base64.encodeToString(combined, Base64.NO_WRAP)
+            PREFIX + Base64.getEncoder().encodeToString(combined)
         } catch (_: Exception) {
-            val encoded = Base64.encodeToString(plainText.toByteArray(Charsets.UTF_8), Base64.NO_WRAP)
+            val encoded = Base64.getEncoder().encodeToString(plainText.toByteArray(Charsets.UTF_8))
             "obf:$encoded"
         }
     }
@@ -41,7 +41,7 @@ object CredentialSecurity {
         if (cipherText.startsWith(PREFIX)) {
             return try {
                 val raw = cipherText.removePrefix(PREFIX)
-                val combined = Base64.decode(raw, Base64.NO_WRAP)
+                val combined = Base64.getDecoder().decode(raw)
                 if (combined.size < GCM_IV_LENGTH) return cipherText
                 val iv = combined.copyOfRange(0, GCM_IV_LENGTH)
                 val encrypted = combined.copyOfRange(GCM_IV_LENGTH, combined.size)
@@ -56,7 +56,7 @@ object CredentialSecurity {
         if (cipherText.startsWith("obf:")) {
             return try {
                 val raw = cipherText.removePrefix("obf:")
-                String(Base64.decode(raw, Base64.NO_WRAP), Charsets.UTF_8)
+                String(Base64.getDecoder().decode(raw), Charsets.UTF_8)
             } catch (_: Exception) {
                 cipherText
             }
