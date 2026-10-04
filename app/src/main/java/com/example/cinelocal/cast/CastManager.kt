@@ -665,10 +665,18 @@ class CastManager private constructor(private val context: Context) {
                 return@launch
             }
 
-            val sourceUri = episode.uriString?.let { Uri.parse(it) }
-                ?: episode.filePath?.let { Uri.fromFile(java.io.File(it)) }
+            val probeUri = try {
+                var urlStr = resolved.url
+                val localIp = proxyServer.getDeviceIpAddress()
+                if (localIp.isNotBlank() && urlStr.contains(localIp)) {
+                    urlStr = urlStr.replace(localIp, "127.0.0.1")
+                }
+                Uri.parse(urlStr)
+            } catch (_: Exception) {
+                Uri.parse(resolved.url)
+            }
 
-            val probeResult = sourceUri?.let { MediaProbe.probeMedia(context, it) }
+            val probeResult = MediaProbe.probeMedia(context, probeUri)
             lastProbeResult = probeResult
 
             val deviceModel = castSession?.castDevice?.modelName
