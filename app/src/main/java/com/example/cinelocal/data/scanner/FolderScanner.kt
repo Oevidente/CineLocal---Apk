@@ -14,7 +14,8 @@ data class ScannedVideoFile(
     val mimeType: String?,
     val sizeBytes: Long,
     val lastModified: Long,
-    val parentFolder: String?
+    val parentFolder: String?,
+    val grandParentFolder: String? = null
 )
 
 object FolderScanner {
@@ -42,6 +43,7 @@ object FolderScanner {
             treeUri = treeUri,
             parentDocId = rootDocId,
             parentFolderName = null,
+            grandParentFolderName = null,
             depth = 0,
             visitedDocIds = visitedDocIds,
             results = results,
@@ -56,6 +58,7 @@ object FolderScanner {
         treeUri: Uri,
         parentDocId: String,
         parentFolderName: String?,
+        grandParentFolderName: String? = null,
         depth: Int,
         visitedDocIds: MutableSet<String>,
         results: MutableList<ScannedVideoFile>,
@@ -97,12 +100,13 @@ object FolderScanner {
                     }
 
                     if (mimeType == DocumentsContract.Document.MIME_TYPE_DIR) {
-                        // Recursão no subdiretório
+                        // Recursão no subdiretório: o parentFolderName vira grandParentFolderName
                         scanDirectory(
                             contentResolver = contentResolver,
                             treeUri = treeUri,
                             parentDocId = docId,
                             parentFolderName = displayName,
+                            grandParentFolderName = parentFolderName,
                             depth = depth + 1,
                             visitedDocIds = visitedDocIds,
                             results = results,
@@ -123,7 +127,8 @@ object FolderScanner {
                             mimeType = mimeType,
                             sizeBytes = size,
                             lastModified = lastModified,
-                            parentFolder = parentFolderName
+                            parentFolder = parentFolderName,
+                            grandParentFolder = grandParentFolderName
                         )
                         results.add(scanned)
                         onProgress?.invoke(results.size, displayName)

@@ -31,7 +31,7 @@ object MediaNameParser {
         Regex("""^(\d{1,3})[._ -]""")
     )
 
-    private val YEAR_PATTERN = Regex("""[._ (](19\d{2}|20\d{2})[._ )]""")
+    private val YEAR_PATTERN = Regex("""[._ (](19\d{2}|20\d{2})([._ )]|$)""")
 
     private val TECHNICAL_TAGS = listOf(
         "2160p", "1080p", "720p", "480p", "4k", "uhd",
@@ -41,7 +41,11 @@ object MediaNameParser {
         "dual", "dublado", "legendado", "subbed", "dubbed", "multi", "remux"
     )
 
-    fun parse(fileName: String, parentFolderName: String? = null): ParsedMediaName {
+    fun parse(
+        fileName: String,
+        parentFolderName: String? = null,
+        grandParentFolderName: String? = null
+    ): ParsedMediaName {
         val nameWithoutExt = fileName.substringBeforeLast('.')
 
         // 1. Verificar padrões de série no próprio nome do arquivo
@@ -53,8 +57,13 @@ object MediaNameParser {
                 val rawTitle = nameWithoutExt.substring(0, match.range.first)
                 val cleanTitle = cleanTitle(rawTitle)
                 val year = extractYear(nameWithoutExt)
+                val fallbackSeriesTitle = when {
+                    !grandParentFolderName.isNullOrBlank() && !isSeasonFolder(grandParentFolderName) -> cleanTitle(grandParentFolderName)
+                    !parentFolderName.isNullOrBlank() && !isSeasonFolder(parentFolderName) -> cleanTitle(parentFolderName)
+                    else -> "Série"
+                }
                 return ParsedMediaName(
-                    title = if (cleanTitle.isNotBlank()) cleanTitle else (parentFolderName ?: "Série"),
+                    title = if (cleanTitle.isNotBlank()) cleanTitle else fallbackSeriesTitle,
                     isSeries = true,
                     seasonNumber = sNum,
                     episodeNumber = eNum,
@@ -63,7 +72,7 @@ object MediaNameParser {
             }
         }
 
-        // 2. Verificar se a pasta pai indica temporada (ex: "Season 1" ou "Temporada 2")
+        // 2. Verificar se a pasta pai indica temporada (ex: "Season 1" ou "Temporada 2") (QA-019)
         if (!parentFolderName.isNullOrBlank()) {
             for (pattern in SEASON_FOLDER_PATTERNS) {
                 val match = pattern.find(parentFolderName)
@@ -77,13 +86,25 @@ object MediaNameParser {
                             break
                         }
                     }
-                    val cleanTitle = cleanTitle(nameWithoutExt)
+
+                    // Se a pasta avó indicar o nome da série (ex: Minha Série / Season 1 / 01.mkv)
+                    val seriesName = when {
+                        !grandParentFolderName.isNullOrBlank() && !isSeasonFolder(grandParentFolderName) ->
+                            cleanTitle(grandParentFolderName)
+                        !isSeasonFolder(parentFolderName) ->
+                            cleanTitle(parentFolderName)
+                        else -> {
+                            val clean = cleanTitle(nameWithoutExt)
+                            if (clean.isNotBlank() && clean.length > 2) clean else "Série"
+                        }
+                    }
+
                     return ParsedMediaName(
-                        title = cleanTitle.ifBlank { nameWithoutExt },
+                        title = seriesName,
                         isSeries = true,
                         seasonNumber = sNum,
                         episodeNumber = eNum,
-                        year = extractYear(nameWithoutExt)
+                        year = extractYear(nameWithoutExt) ?: extractYear(grandParentFolderName ?: "")
                     )
                 }
             }
@@ -99,6 +120,10 @@ object MediaNameParser {
             episodeNumber = 1,
             year = year
         )
+    }
+
+    private fun isSeasonFolder(folderName: String): Boolean {
+        return SEASON_FOLDER_PATTERNS.any { it.containsMatchIn(folderName) }
     }
 
     private fun extractYear(text: String): Int? {

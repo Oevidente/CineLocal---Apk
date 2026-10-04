@@ -29,8 +29,10 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.firstOrNull
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.io.File
 
 enum class ResizeMode(val mode: Int, val label: String) {
@@ -172,8 +174,11 @@ class PlayerViewModel(
         }
     }
 
+    private var wasPlayingBeforeCast: Boolean = false
+
     private fun onCastSessionStarted() {
         if (currentEpisode == null && currentChannel == null) return
+        wasPlayingBeforeCast = exoPlayer?.isPlaying == true || (exoPlayer?.playbackState != Player.STATE_ENDED && exoPlayer?.playWhenReady == true)
         localPositionBeforeCast = exoPlayer?.currentPosition ?: 0L
         triggerCastForCurrentMedia()
     }
@@ -181,7 +186,11 @@ class PlayerViewModel(
     private fun onCastSessionEnded() {
         val pos = if (lastRemotePositionMs > 0) lastRemotePositionMs else localPositionBeforeCast
         exoPlayer?.seekTo(pos)
-        exoPlayer?.play()
+        if (wasPlayingBeforeCast) {
+            exoPlayer?.play()
+        } else {
+            exoPlayer?.pause()
+        }
     }
 
     private fun createPlayer(): ExoPlayer {
@@ -309,15 +318,18 @@ class PlayerViewModel(
         val resumePos = startPositionMs ?: (episode.progressSeconds * 1000)
 
         viewModelScope.launch {
-            val media = repository.getMediaById(episode.mediaId)
-            val downloadedSubs = repository.getSubtitlesListForEpisode(episode.id)
+            // Executa resolução de fonte e consultas pesadas em background (QA-017)
+            val (media, downloadedSubs, resolveResult) = withContext(Dispatchers.IO) {
+                val m = repository.getMediaById(episode.mediaId)
+                val subs = repository.getSubtitlesListForEpisode(episode.id)
+                val resolved = PlaybackSourceResolver.resolve(
+                    context = getApplication(),
+                    ep = episode,
+                    media = m
+                )
+                Triple(m, subs, resolved)
+            }
             _downloadedSubtitles.value = downloadedSubs
-
-            val resolveResult = PlaybackSourceResolver.resolve(
-                context = getApplication(),
-                ep = episode,
-                media = media
-            )
 
             when (resolveResult) {
                 is ResolveResult.Ok -> {

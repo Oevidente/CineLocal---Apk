@@ -60,4 +60,29 @@ class SmbSecurityAndTorrentTest {
         assertEquals(2, episodes[1].episodeNumber)
         assertEquals("Show.S02E01.mkv", episodes[0].filePath)
     }
+
+    @Test
+    fun testParserGrandParentFolderSeriesRecognition() {
+        // QA-019 verification: Structure Série/Season 1/01.mkv must recognize series name from grandparent
+        val parsed = com.example.cinelocal.data.scanner.MediaNameParser.parse(
+            fileName = "01.mkv",
+            parentFolderName = "Season 1",
+            grandParentFolderName = "Minha Serie Incrivel"
+        )
+        assertTrue(parsed.isSeries)
+        assertEquals("Minha Serie Incrivel", parsed.title)
+        assertEquals(1, parsed.seasonNumber)
+        assertEquals(1, parsed.episodeNumber)
+    }
+
+    @Test
+    fun testYearParserWithTrailingFilename() {
+        // QA-020 verification: Film 2024.mkv must recognize 2024 even without trailing punctuation before extension
+        val parsed = com.example.cinelocal.data.scanner.MediaNameParser.parse(
+            fileName = "Filme de Acao 2024.mkv"
+        )
+        assertFalse(parsed.isSeries)
+        assertEquals(2024, parsed.year)
+        assertEquals("Filme de Acao", parsed.title)
+    }
 }

@@ -39,7 +39,33 @@ object SmbClientManager {
     private val activeSessions = ConcurrentHashMap<String, Pair<Connection, Session>>()
 
     private fun getSessionKey(config: SmbConnectionConfig): String {
-        return "${config.host}:${config.port}:${if (config.isAnonymous) "anon" else config.username}"
+        val authPart = if (config.isAnonymous) {
+            "anon"
+        } else {
+            val pwdHash = config.password.hashCode()
+            "${config.domain.trim()}\\${config.username.trim()}:$pwdHash"
+        }
+        return "${config.host}:${config.port}:$authPart"
+    }
+
+    fun invalidateSession(config: SmbConnectionConfig) {
+        val key = getSessionKey(config)
+        val cached = activeSessions.remove(key)
+        try {
+            cached?.second?.close()
+            cached?.first?.close()
+        } catch (_: Exception) {}
+    }
+
+    fun clearAllSessions() {
+        val keys = activeSessions.keys().toList()
+        for (k in keys) {
+            val cached = activeSessions.remove(k)
+            try {
+                cached?.second?.close()
+                cached?.first?.close()
+            } catch (_: Exception) {}
+        }
     }
 
     fun getOrCreateSessionSync(config: SmbConnectionConfig): Session {

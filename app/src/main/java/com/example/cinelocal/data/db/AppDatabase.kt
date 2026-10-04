@@ -28,7 +28,7 @@ import com.example.cinelocal.data.model.SubtitleFileEntity
         NetworkServerEntity::class,
         SubtitleFileEntity::class
     ],
-    version = 4,
+    version = 5,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -105,6 +105,38 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        val MIGRATION_4_5 = object : Migration(4, 5) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS `subtitle_files_new` (
+                        `id` TEXT NOT NULL,
+                        `episodeId` TEXT NOT NULL,
+                        `language` TEXT NOT NULL,
+                        `label` TEXT NOT NULL,
+                        `filePath` TEXT NOT NULL,
+                        `source` TEXT NOT NULL,
+                        `osFileId` INTEGER,
+                        `addedAt` INTEGER NOT NULL,
+                        PRIMARY KEY(`id`),
+                        FOREIGN KEY(`episodeId`) REFERENCES `episodes`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE
+                    )
+                    """.trimIndent()
+                )
+                db.execSQL(
+                    """
+                    INSERT INTO `subtitle_files_new` (`id`, `episodeId`, `language`, `label`, `filePath`, `source`, `osFileId`, `addedAt`)
+                    SELECT s.`id`, s.`episodeId`, s.`language`, s.`label`, s.`filePath`, s.`source`, s.`osFileId`, s.`addedAt`
+                    FROM `subtitle_files` s
+                    INNER JOIN `episodes` e ON s.`episodeId` = e.`id`
+                    """.trimIndent()
+                )
+                db.execSQL("DROP TABLE `subtitle_files`")
+                db.execSQL("ALTER TABLE `subtitle_files_new` RENAME TO `subtitle_files`")
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_subtitle_files_episodeId` ON `subtitle_files` (`episodeId`)")
+            }
+        }
+
         fun getInstance(context: Context): AppDatabase {
             return INSTANCE ?: synchronized(this) {
                 val instance = Room.databaseBuilder(
@@ -112,7 +144,7 @@ abstract class AppDatabase : RoomDatabase() {
                     AppDatabase::class.java,
                     "cinelocal.db"
                 )
-                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
+                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
                     .fallbackToDestructiveMigrationOnDowngrade()
                     .build()
                 INSTANCE = instance

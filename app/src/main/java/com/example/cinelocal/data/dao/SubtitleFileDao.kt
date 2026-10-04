@@ -23,4 +23,10 @@ interface SubtitleFileDao {
 
     @Query("DELETE FROM subtitle_files WHERE episodeId = :episodeId")
     suspend fun deleteSubtitlesForEpisode(episodeId: String)
+
+    @Query("DELETE FROM subtitle_files WHERE episodeId NOT IN (SELECT id FROM episodes)")
+    suspend fun deleteOrphanSubtitles(): Int
+
+    @Query("SELECT filePath FROM subtitle_files WHERE episodeId NOT IN (SELECT id FROM episodes)")
+    suspend fun getOrphanSubtitlePaths(): List<String>
 }

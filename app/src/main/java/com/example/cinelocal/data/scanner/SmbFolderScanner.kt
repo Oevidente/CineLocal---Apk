@@ -41,8 +41,10 @@ object SmbFolderScanner {
         val moviesList = mutableListOf<Pair<SmbFileItem, ParsedMediaName>>()
 
         for (video in collectedVideos) {
-            val parentName = video.path.substringBeforeLast('/', "").substringAfterLast('/')
-            val parsed = MediaNameParser.parse(video.name, parentName.ifBlank { null })
+            val pathSegments = video.path.trim('/').split('/')
+            val parentName = if (pathSegments.size >= 2) pathSegments[pathSegments.size - 2] else null
+            val grandParentName = if (pathSegments.size >= 3) pathSegments[pathSegments.size - 3] else null
+            val parsed = MediaNameParser.parse(video.name, parentName?.ifBlank { null }, grandParentName?.ifBlank { null })
             if (parsed.isSeries) {
                 val groupKey = parsed.title.lowercase().trim()
                 seriesGroups.getOrPut(groupKey) { mutableListOf() }.add(Pair(video, parsed))

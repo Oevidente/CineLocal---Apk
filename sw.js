@@ -1,4 +1,4 @@
-const CACHE_NAME = 'cinelocal-pwa-v1.4.0';
+const CACHE_NAME = 'cinelocal-pwa-v1.5.0';
 const ASSETS = [
   './',
   './index.html',

@@ -81,7 +81,10 @@ jobs:
           mkdir -p dist apk
           cp app/build/outputs/apk/debug/app-debug.apk dist/CineLocal-debug.apk
           cp app/build/outputs/apk/debug/app-debug.apk apk/CineLocal-debug.apk
+          cp app/build/outputs/apk/debug/app-debug.apk apk/CineLocal.apk
+          cp app/build/outputs/apk/debug/app-debug.apk apk/CineLocal-v1.5.0.apk
           ls -la dist/
+          ls -la apk/
 
       - name: Conferir assinatura e versao
         continue-on-error: true

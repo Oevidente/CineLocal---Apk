@@ -8,6 +8,8 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.ViewModelProvider
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -122,10 +124,22 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
 
         db = AppDatabase.getInstance(applicationContext)
-
         repository = MediaRepository(applicationContext, db)
-        mainViewModel = MainViewModel(application, repository)
-        playerViewModel = PlayerViewModel(application, repository)
+
+        val factory = object : ViewModelProvider.Factory {
+            @Suppress("UNCHECKED_CAST")
+            override fun <T : ViewModel> create(modelClass: Class<T>): T {
+                return when {
+                    modelClass.isAssignableFrom(MainViewModel::class.java) ->
+                        MainViewModel(application, repository) as T
+                    modelClass.isAssignableFrom(PlayerViewModel::class.java) ->
+                        PlayerViewModel(application, repository) as T
+                    else -> throw IllegalArgumentException("Unknown ViewModel class ${modelClass.name}")
+                }
+            }
+        }
+        mainViewModel = ViewModelProvider(this, factory)[MainViewModel::class.java]
+        playerViewModel = ViewModelProvider(this, factory)[PlayerViewModel::class.java]
 
         setContent {
             CineLocalTheme {
@@ -186,7 +200,9 @@ class MainActivity : ComponentActivity() {
 
     override fun onDestroy() {
         super.onDestroy()
-        playerViewModel.releasePlayer()
+        if (isFinishing) {
+            playerViewModel.releasePlayer()
+        }
     }
 }
 
