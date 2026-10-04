@@ -267,6 +267,8 @@ class CastManager private constructor(private val context: Context) {
 
     fun disconnect() {
         try {
+            verificationJob?.cancel()
+            verificationJob = null
             castContext?.sessionManager?.endCurrentSession(true)
             mediaRouter?.unselect(MediaRouter.UNSELECT_REASON_DISCONNECTED)
             CastServerService.stop(context)
@@ -274,6 +276,8 @@ class CastManager private constructor(private val context: Context) {
             _castState.value = _castState.value.copy(
                 isConnected = false,
                 isConnecting = false,
+                isPlaying = false,
+                isBuffering = false,
                 deviceName = null
             )
         } catch (e: Exception) {
@@ -335,6 +339,94 @@ class CastManager private constructor(private val context: Context) {
                     )
                 }
                 delay(1000)
+            }
+        }
+    }
+
+    private var verificationJob: Job? = null
+
+    private fun verifyPlaybackStarted(
+        isLive: Boolean,
+        url: String,
+        mimeType: String,
+        mediaTitle: String,
+        subtitle: String,
+        startPositionMs: Long = 0,
+        timeoutSeconds: Int = if (isLive) 25 else 20,
+        onResult: ((Boolean, String?) -> Unit)?
+    ) {
+        verificationJob?.cancel()
+        verificationJob = scope.launch {
+            val startTime = System.currentTimeMillis()
+            val timeoutMs = timeoutSeconds * 1000L
+            var reported = false
+
+            proxyServer.log("Iniciando verificação de reprodução remota no Chromecast (timeout: ${timeoutSeconds}s) -> $url ($mimeType)")
+
+            while (isActive && System.currentTimeMillis() - startTime < timeoutMs) {
+                val client = castSession?.remoteMediaClient
+                if (client == null || castSession?.isConnected != true) {
+                    proxyServer.log("Sessão Cast perdida durante verificação de reprodução.")
+                    onResult?.invoke(false, "Sessão com o Chromecast desconectada")
+                    reported = true
+                    break
+                }
+
+                val status = client.mediaStatus
+                val playerState = status?.playerState ?: MediaStatus.PLAYER_STATE_UNKNOWN
+                val idleReason = status?.idleReason ?: MediaStatus.IDLE_REASON_NONE
+                val pos = client.approximateStreamPosition
+                val dur = client.streamDuration
+
+                proxyServer.log("[STATUS CAST] playerState=$playerState idleReason=$idleReason pos=$pos dur=$dur url=$url")
+
+                if (playerState == MediaStatus.PLAYER_STATE_PLAYING) {
+                    proxyServer.log("[SUCESSO CAST] Reprodução ativa confirmada (PLAYING) no receptor!")
+                    _castState.value = _castState.value.copy(
+                        title = mediaTitle,
+                        subtitle = subtitle,
+                        isPlaying = true,
+                        isBuffering = false,
+                        currentPosition = if (pos > 0) pos else startPositionMs,
+                        duration = if (dur > 0) dur else 0,
+                        lastError = null
+                    )
+                    onResult?.invoke(true, null)
+                    reported = true
+                    break
+                }
+
+                if (playerState == MediaStatus.PLAYER_STATE_IDLE && idleReason == MediaStatus.IDLE_REASON_ERROR) {
+                    val errorMsg = "A TV encontrou um erro ao decodificar a mídia (formato ou codec não suportado pelo Chromecast)."
+                    proxyServer.log("[ERRO CAST] Receptor retornou IDLE com IDLE_REASON_ERROR")
+                    _castState.value = _castState.value.copy(
+                        isPlaying = false,
+                        isBuffering = false,
+                        lastError = errorMsg
+                    )
+                    onResult?.invoke(false, errorMsg)
+                    reported = true
+                    break
+                }
+
+                if (playerState == MediaStatus.PLAYER_STATE_BUFFERING) {
+                    _castState.value = _castState.value.copy(isBuffering = true)
+                }
+
+                delay(1000)
+            }
+
+            if (!reported) {
+                val client = castSession?.remoteMediaClient
+                val lastState = client?.mediaStatus?.playerState ?: "desconhecido"
+                val errorMsg = "Tempo limite excedido aguardando início da reprodução na TV (último estado: $lastState)."
+                proxyServer.log("[TIMEOUT CAST] $errorMsg")
+                _castState.value = _castState.value.copy(
+                    isPlaying = false,
+                    isBuffering = false,
+                    lastError = errorMsg
+                )
+                onResult?.invoke(false, errorMsg)
             }
         }
     }
@@ -408,13 +500,24 @@ class CastManager private constructor(private val context: Context) {
 
         client.load(request).setResultCallback { result ->
             if (result.status.isSuccess) {
+                proxyServer.log("Comando LOAD aceito pelo Chromecast. Aguardando PLAYER_STATE_PLAYING...")
                 _castState.value = _castState.value.copy(
                     title = mediaTitle,
                     subtitle = episode.title,
                     currentPosition = startPositionMs,
+                    isBuffering = true,
                     lastError = null
                 )
-                onResult?.invoke(true, null)
+                verifyPlaybackStarted(
+                    isLive = resolved.streamType == MediaInfo.STREAM_TYPE_LIVE,
+                    url = resolved.url,
+                    mimeType = resolved.mimeType,
+                    mediaTitle = mediaTitle,
+                    subtitle = episode.title,
+                    startPositionMs = startPositionMs,
+                    timeoutSeconds = 20,
+                    onResult = onResult
+                )
             } else {
                 val errorMsg = "Falha ao carregar na TV (Código: ${result.status.statusCode} ${result.status.statusMessage ?: ""})"
                 _castState.value = _castState.value.copy(lastError = errorMsg)
@@ -456,14 +559,24 @@ class CastManager private constructor(private val context: Context) {
 
         client.load(request).setResultCallback { result ->
             if (result.status.isSuccess) {
-                proxyServer.log("Comando de carregar canal IPTV aceito pelo Chromecast com sucesso!")
+                proxyServer.log("Comando de carregar canal IPTV aceito pelo Chromecast. Aguardando PLAYER_STATE_PLAYING...")
                 _castState.value = _castState.value.copy(
                     title = channel.name,
                     subtitle = channel.group,
                     currentPosition = 0,
+                    isBuffering = true,
                     lastError = null
                 )
-                onResult?.invoke(true, null)
+                verifyPlaybackStarted(
+                    isLive = true,
+                    url = resolved.url,
+                    mimeType = resolved.mimeType,
+                    mediaTitle = channel.name,
+                    subtitle = channel.group,
+                    startPositionMs = 0L,
+                    timeoutSeconds = 25,
+                    onResult = onResult
+                )
             } else {
                 val errorMsg = "Falha ao carregar canal na TV (Código: ${result.status.statusCode} ${result.status.statusMessage ?: ""})"
                 proxyServer.log("ERRO CAST: $errorMsg")

@@ -39,6 +39,26 @@ object CastMediaResolver {
         media: MediaItemEntity?,
         proxyServer: MediaProxyServer
     ): CastResolvedSource? {
+        // CAST-003: Reutilização do arquivo de torrent preparado se já baixado/em buffer
+        val isMagnetOrTorrent = episode.streamUrl?.startsWith("magnet:") == true ||
+            media?.kind == com.example.cinelocal.data.model.MediaKind.TORRENT ||
+            episode.filePath?.contains("torrents") == true
+
+        if (isMagnetOrTorrent) {
+            val torrentStatus = com.example.cinelocal.data.torrent.TorrentStreamEngine.status.value
+            val preparedFile = torrentStatus.currentVideoFile
+            if (preparedFile != null && preparedFile.exists() && preparedFile.isFile && preparedFile.length() > 0) {
+                proxyServer.log("Reutilizando arquivo de torrent preparado (${preparedFile.length()} bytes): ${preparedFile.name}")
+                val proxyUrl = proxyServer.registerMedia(Uri.fromFile(preparedFile), "video/mp4")
+                return CastResolvedSource(
+                    url = proxyUrl,
+                    mimeType = "video/mp4",
+                    streamType = MediaInfo.STREAM_TYPE_BUFFERED,
+                    isLocal = true
+                )
+            }
+        }
+
         val result = PlaybackSourceResolver.resolve(context, episode, media)
         if (result !is ResolveResult.Ok) {
             proxyServer.log("Falha ao resolver fonte de vídeo em PlaybackSourceResolver para o Cast: episodeId=${episode.id}")
@@ -69,6 +89,7 @@ object CastMediaResolver {
         // URI Local (content:// ou file://) -> registrar no MediaProxyServer
         val detectedMime = detectMimeType(context, uri)
         val castMime = sanitizeMimeForCast(uri.toString(), detectedMime)
+        logMediaTracks(context, uri, proxyServer)
         val proxyUrl = proxyServer.registerMedia(uri, castMime)
 
         return CastResolvedSource(
@@ -85,7 +106,8 @@ object CastMediaResolver {
     ): CastResolvedSource {
         val trimmed = channelUrl.trim()
         val mime = sanitizeMimeForCast(trimmed)
-        val proxyUrl = if (trimmed.startsWith("http://", ignoreCase = true)) {
+        // CAST-002: URLs HTTP e HTTPS são registradas no proxy local para HLS rewriting e compatibilidade
+        val proxyUrl = if (trimmed.startsWith("http://", ignoreCase = true) || trimmed.startsWith("https://", ignoreCase = true)) {
             proxyServer.registerIptvUrl(trimmed)
         } else {
             trimmed
@@ -96,6 +118,32 @@ object CastMediaResolver {
             streamType = MediaInfo.STREAM_TYPE_LIVE,
             isLocal = true
         )
+    }
+
+    private fun logMediaTracks(context: Context, uri: Uri, proxyServer: MediaProxyServer) {
+        var extractor: android.media.MediaExtractor? = null
+        try {
+            extractor = android.media.MediaExtractor()
+            if (uri.scheme == "file") {
+                extractor.setDataSource(uri.path ?: "")
+            } else {
+                extractor.setDataSource(context, uri, null)
+            }
+            val trackCount = extractor.trackCount
+            val tracksList = mutableListOf<String>()
+            for (i in 0 until trackCount) {
+                val format = extractor.getTrackFormat(i)
+                val mime = format.getString(android.media.MediaFormat.KEY_MIME) ?: "desconhecido"
+                val width = if (format.containsKey(android.media.MediaFormat.KEY_WIDTH)) "${format.getInteger(android.media.MediaFormat.KEY_WIDTH)}x${format.getInteger(android.media.MediaFormat.KEY_HEIGHT)}" else ""
+                val sampleRate = if (format.containsKey(android.media.MediaFormat.KEY_SAMPLE_RATE)) "${format.getInteger(android.media.MediaFormat.KEY_SAMPLE_RATE)}Hz" else ""
+                tracksList.add("$mime $width $sampleRate".trim())
+            }
+            proxyServer.log("Fonte local para Cast: uri=$uri detectedMime=${detectMimeType(context, uri)} tracks=${tracksList.joinToString(" | ")}")
+        } catch (e: Exception) {
+            proxyServer.log("Fonte local para Cast: uri=$uri (MediaExtractor: ${e.message})")
+        } finally {
+            try { extractor?.release() } catch (_: Exception) {}
+        }
     }
 
     private fun detectMimeType(context: Context, uri: Uri): String {

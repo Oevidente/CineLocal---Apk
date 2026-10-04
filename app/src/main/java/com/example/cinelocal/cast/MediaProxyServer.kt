@@ -22,6 +22,8 @@ import java.net.HttpURLConnection
 import java.net.ServerSocket
 import java.net.Socket
 import java.net.URL
+import java.net.URLDecoder
+import java.net.URLEncoder
 import java.nio.ByteBuffer
 import java.nio.channels.FileChannel
 import java.util.Collections
@@ -243,6 +245,10 @@ class MediaProxyServer(private val context: Context) {
                         val token = path.removePrefix("/s/").substringBefore(".").substringBefore("?")
                         serveSubtitle(out, token, method)
                     }
+                    path.startsWith("/iptv_res") -> {
+                        val query = path.substringAfter("?", "")
+                        serveIptvResource(out, query, method, rangeHeader)
+                    }
                     path.startsWith("/iptv/") -> {
                         val token = path.removePrefix("/iptv/").substringBefore(".").substringBefore("?")
                         serveIptvProxy(out, token, method)
@@ -307,6 +313,47 @@ class MediaProxyServer(private val context: Context) {
         log("Legenda servida com sucesso: token=$token (${bytes.size} bytes)")
     }
 
+    private fun rewriteHlsPlaylist(playlist: String, baseUrl: URL, ip: String, port: Int): String {
+        val lines = playlist.lines()
+        val uriAttrRegex = Regex("""URI="([^"]+)"""")
+        val result = StringBuilder()
+
+        for (line in lines) {
+            val trimmed = line.trim()
+            if (trimmed.isEmpty()) {
+                result.append("\n")
+                continue
+            }
+
+            if (trimmed.startsWith("#")) {
+                if (uriAttrRegex.containsMatchIn(trimmed)) {
+                    val replacedLine = uriAttrRegex.replace(trimmed) { matchResult ->
+                        val rawUri = matchResult.groupValues[1]
+                        val absoluteUrl = try {
+                            URL(baseUrl, rawUri).toString()
+                        } catch (_: Exception) {
+                            rawUri
+                        }
+                        val encoded = URLEncoder.encode(absoluteUrl, "UTF-8")
+                        """URI="http://$ip:$port/iptv_res?u=$encoded""""
+                    }
+                    result.append(replacedLine).append("\n")
+                } else {
+                    result.append(line).append("\n")
+                }
+            } else {
+                val absoluteUrl = try {
+                    URL(baseUrl, trimmed).toString()
+                } catch (_: Exception) {
+                    trimmed
+                }
+                val encoded = URLEncoder.encode(absoluteUrl, "UTF-8")
+                result.append("http://$ip:$port/iptv_res?u=$encoded").append("\n")
+            }
+        }
+        return result.toString()
+    }
+
     private fun serveIptvProxy(out: OutputStream, token: String, method: String) {
         val originalUrl = iptvSources[token]
         if (originalUrl == null) {
@@ -317,25 +364,191 @@ class MediaProxyServer(private val context: Context) {
 
         try {
             log("Iniciando proxy IPTV para Chromecast -> $originalUrl")
-            val conn = (URL(originalUrl).openConnection() as HttpURLConnection).apply {
+            var conn = (URL(originalUrl).openConnection() as HttpURLConnection).apply {
                 connectTimeout = 8000
-                readTimeout = 10000
+                readTimeout = 12000
+                instanceFollowRedirects = true
                 requestMethod = method
-                setRequestProperty("User-Agent", "CineLocal/1.6.3 (Android)")
+                setRequestProperty("User-Agent", "CineLocal/1.6.4 (Android)")
+            }
+
+            var redirectCount = 0
+            while (conn.responseCode in 301..308 && redirectCount < 5) {
+                val location = conn.getHeaderField("Location") ?: break
+                val newUrl = URL(conn.url, location).toString()
+                conn.disconnect()
+                conn = (URL(newUrl).openConnection() as HttpURLConnection).apply {
+                    connectTimeout = 8000
+                    readTimeout = 12000
+                    instanceFollowRedirects = true
+                    requestMethod = method
+                    setRequestProperty("User-Agent", "CineLocal/1.6.4 (Android)")
+                }
+                redirectCount++
             }
 
             val code = conn.responseCode
+            val effectiveUrl = conn.url
             val contentType = conn.contentType ?: "application/x-mpegURL"
-            val len = conn.contentLengthLong
 
-            val headers = "HTTP/1.1 $code ${conn.responseMessage}\r\n" +
-                "Content-Type: $contentType\r\n" +
-                "Access-Control-Allow-Origin: *\r\n" +
-                "Access-Control-Allow-Methods: GET, HEAD, OPTIONS\r\n" +
-                (if (len > 0) "Content-Length: $len\r\n" else "") +
-                "Connection: close\r\n\r\n"
+            if (code !in 200..299) {
+                log("IPTV HTTP error $code para $originalUrl")
+                val headers = "HTTP/1.1 $code ${conn.responseMessage}\r\n" +
+                    "Access-Control-Allow-Origin: *\r\n" +
+                    "Content-Length: 0\r\n" +
+                    "Connection: close\r\n\r\n"
+                out.write(headers.toByteArray())
+                out.flush()
+                return
+            }
 
-            out.write(headers.toByteArray())
+            if (method == "HEAD") {
+                val headers = "HTTP/1.1 $code OK\r\n" +
+                    "Content-Type: $contentType\r\n" +
+                    "Access-Control-Allow-Origin: *\r\n" +
+                    "Connection: close\r\n\r\n"
+                out.write(headers.toByteArray())
+                out.flush()
+                return
+            }
+
+            val rawBytes = conn.inputStream.use { it.readBytes() }
+            val rawString = String(rawBytes, Charsets.UTF_8)
+
+            if (rawString.startsWith("#EXTM3U") || contentType.contains("mpegurl", ignoreCase = true) || originalUrl.contains(".m3u8", ignoreCase = true)) {
+                val ip = getDeviceIpAddress()
+                val rewrittenPlaylist = rewriteHlsPlaylist(rawString, effectiveUrl, ip, port)
+                val playlistBytes = rewrittenPlaylist.toByteArray(Charsets.UTF_8)
+
+                val headers = "HTTP/1.1 200 OK\r\n" +
+                    "Content-Type: application/x-mpegURL\r\n" +
+                    "Content-Length: ${playlistBytes.size}\r\n" +
+                    "Cache-Control: no-cache, no-store, must-revalidate\r\n" +
+                    "Pragma: no-cache\r\n" +
+                    "Expires: 0\r\n" +
+                    "Access-Control-Allow-Origin: *\r\n" +
+                    "Access-Control-Allow-Methods: GET, HEAD, OPTIONS\r\n" +
+                    "Access-Control-Allow-Headers: Range, Content-Type, Accept, Origin\r\n" +
+                    "Connection: close\r\n\r\n"
+
+                out.write(headers.toByteArray())
+                out.write(playlistBytes)
+                out.flush()
+                log("IPTV HLS Playlist entregue ao Chromecast com URIs proxificadas (${playlistBytes.size} bytes)")
+            } else {
+                val headers = "HTTP/1.1 $code OK\r\n" +
+                    "Content-Type: $contentType\r\n" +
+                    "Content-Length: ${rawBytes.size}\r\n" +
+                    "Access-Control-Allow-Origin: *\r\n" +
+                    "Connection: close\r\n\r\n"
+                out.write(headers.toByteArray())
+                out.write(rawBytes)
+                out.flush()
+            }
+        } catch (e: Exception) {
+            log("Erro ao retransmitir IPTV ($originalUrl): ${e.message}")
+            sendNotFound(out)
+        }
+    }
+
+    private fun serveIptvResource(out: OutputStream, query: String?, method: String, rangeHeader: String?) {
+        val encodedUrl = query?.split("&")
+            ?.firstOrNull { it.startsWith("u=") }
+            ?.removePrefix("u=")
+        if (encodedUrl.isNullOrBlank()) {
+            sendNotFound(out)
+            return
+        }
+
+        val targetUrl = try {
+            URLDecoder.decode(encodedUrl, "UTF-8")
+        } catch (_: Exception) {
+            sendNotFound(out)
+            return
+        }
+
+        try {
+            var conn = (URL(targetUrl).openConnection() as HttpURLConnection).apply {
+                connectTimeout = 8000
+                readTimeout = 15000
+                instanceFollowRedirects = true
+                requestMethod = method
+                setRequestProperty("User-Agent", "CineLocal/1.6.4 (Android)")
+                if (!rangeHeader.isNullOrBlank()) {
+                    setRequestProperty("Range", rangeHeader)
+                }
+            }
+
+            var redirectCount = 0
+            while (conn.responseCode in 301..308 && redirectCount < 5) {
+                val location = conn.getHeaderField("Location") ?: break
+                val newUrl = URL(conn.url, location).toString()
+                conn.disconnect()
+                conn = (URL(newUrl).openConnection() as HttpURLConnection).apply {
+                    connectTimeout = 8000
+                    readTimeout = 15000
+                    instanceFollowRedirects = true
+                    requestMethod = method
+                    setRequestProperty("User-Agent", "CineLocal/1.6.4 (Android)")
+                    if (!rangeHeader.isNullOrBlank()) {
+                        setRequestProperty("Range", rangeHeader)
+                    }
+                }
+                redirectCount++
+            }
+
+            val code = conn.responseCode
+            val contentType = when {
+                targetUrl.contains(".ts", ignoreCase = true) -> "video/MP2T"
+                targetUrl.contains(".m3u8", ignoreCase = true) -> "application/x-mpegURL"
+                targetUrl.contains(".m4s", ignoreCase = true) || targetUrl.contains(".mp4", ignoreCase = true) -> "video/mp4"
+                targetUrl.contains(".aac", ignoreCase = true) -> "audio/aac"
+                else -> conn.contentType ?: "application/octet-stream"
+            }
+
+            if (targetUrl.contains(".m3u8", ignoreCase = true) || contentType.contains("mpegurl", ignoreCase = true)) {
+                val rawBytes = conn.inputStream.use { it.readBytes() }
+                val rawString = String(rawBytes, Charsets.UTF_8)
+                val ip = getDeviceIpAddress()
+                val rewritten = rewriteHlsPlaylist(rawString, conn.url, ip, port)
+                val rewrittenBytes = rewritten.toByteArray(Charsets.UTF_8)
+
+                val headers = "HTTP/1.1 200 OK\r\n" +
+                    "Content-Type: application/x-mpegURL\r\n" +
+                    "Content-Length: ${rewrittenBytes.size}\r\n" +
+                    "Cache-Control: no-cache, no-store, must-revalidate\r\n" +
+                    "Access-Control-Allow-Origin: *\r\n" +
+                    "Access-Control-Allow-Methods: GET, HEAD, OPTIONS\r\n" +
+                    "Connection: close\r\n\r\n"
+                out.write(headers.toByteArray())
+                if (method != "HEAD") {
+                    out.write(rewrittenBytes)
+                }
+                out.flush()
+                return
+            }
+
+            val contentLength = conn.contentLengthLong
+            val contentRange = conn.getHeaderField("Content-Range")
+            val statusLine = if (code == 206) "HTTP/1.1 206 Partial Content\r\n" else "HTTP/1.1 $code ${conn.responseMessage}\r\n"
+
+            val headerBuilder = StringBuilder()
+            headerBuilder.append(statusLine)
+            headerBuilder.append("Content-Type: $contentType\r\n")
+            headerBuilder.append("Accept-Ranges: bytes\r\n")
+            headerBuilder.append("Access-Control-Allow-Origin: *\r\n")
+            headerBuilder.append("Access-Control-Allow-Methods: GET, HEAD, OPTIONS\r\n")
+            headerBuilder.append("Access-Control-Allow-Headers: Range, Content-Type, Accept, Origin\r\n")
+            headerBuilder.append("Access-Control-Expose-Headers: Content-Length, Content-Range, Accept-Ranges, Content-Type\r\n")
+            if (contentLength > 0) {
+                headerBuilder.append("Content-Length: $contentLength\r\n")
+            }
+            if (!contentRange.isNullOrBlank()) {
+                headerBuilder.append("Content-Range: $contentRange\r\n")
+            }
+            headerBuilder.append("Connection: close\r\n\r\n")
+
+            out.write(headerBuilder.toString().toByteArray())
             out.flush()
 
             if (method != "HEAD" && code in 200..299) {
@@ -344,9 +557,8 @@ class MediaProxyServer(private val context: Context) {
                 }
                 out.flush()
             }
-            log("IPTV Proxy finalizado para $originalUrl (HTTP $code)")
         } catch (e: Exception) {
-            log("Erro ao retransmitir IPTV ($originalUrl): ${e.message}")
+            log("Erro ao servir recurso IPTV ($targetUrl): ${e.message}")
             sendNotFound(out)
         }
     }
