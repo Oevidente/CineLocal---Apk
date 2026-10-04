@@ -14,8 +14,7 @@ captures/
 *.jks
 *.keystore
 
-# APKs são distribuídos pelo GitHub Releases, não pelo repositório
-apk/
+# apk/
 dist/
 *.apk
 

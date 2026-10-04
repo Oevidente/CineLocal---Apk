@@ -68,6 +68,7 @@ fun CastIncompatibleDialog(
         Toast.makeText(context, "Comando copiado para a área de transferência!", Toast.LENGTH_SHORT).show()
     }
 
+    val ffmpegRemuxCmd = "ffmpeg -i entrada.mkv -c copy -movflags +faststart saida.mp4"
     val ffmpegConvertCmd = "ffmpeg -i entrada.mkv -c:v libx264 -profile:v high -level 4.1 -pix_fmt yuv420p -crf 20 -c:a aac -b:a 192k -movflags +faststart saida.mp4"
     val ffmpegAudioCopyCmd = "ffmpeg -i entrada.mkv -c:v copy -c:a aac -b:a 192k -movflags +faststart saida.mp4"
 
@@ -118,14 +119,38 @@ fun CastIncompatibleDialog(
                     ) {
                         Column(modifier = Modifier.padding(12.dp)) {
                             Text(
-                                text = "Como converter para MP4 (H.264 + AAC):",
+                                text = "Como preparar o arquivo no PC com FFmpeg:",
                                 style = MaterialTheme.typography.labelMedium,
                                 fontWeight = FontWeight.Bold,
                                 color = AccentGold
                             )
                             Spacer(modifier = Modifier.height(6.dp))
+
                             Text(
-                                text = "1. Para converter vídeo HEVC completo:",
+                                text = "Opção 1. Reempacotar ultra rápido (mudar de MKV para MP4 sem recodificar, leva 2 segundos!):",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = TextSecondary,
+                                fontSize = 11.sp
+                            )
+                            Text(
+                                text = ffmpegRemuxCmd,
+                                fontFamily = FontFamily.Monospace,
+                                fontSize = 10.sp,
+                                color = TextPrimary,
+                                modifier = Modifier.padding(vertical = 4.dp)
+                            )
+                            TextButton(
+                                onClick = { copyFfmpegToClipboard(ffmpegRemuxCmd) }
+                            ) {
+                                Icon(Icons.Default.ContentCopy, contentDescription = null, modifier = Modifier.size(14.dp), tint = CineRed)
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text("Copiar Comando Remux", fontSize = 11.sp, color = CineRed)
+                            }
+
+                            Spacer(modifier = Modifier.height(10.dp))
+
+                            Text(
+                                text = "Opção 2. Se precisar converter vídeo HEVC (H.265) inteiro para H.264:",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = TextSecondary,
                                 fontSize = 11.sp
@@ -145,9 +170,10 @@ fun CastIncompatibleDialog(
                                 Text("Copiar Comando Completo", fontSize = 11.sp, color = CineRed)
                             }
 
-                            Spacer(modifier = Modifier.height(8.dp))
+                            Spacer(modifier = Modifier.height(10.dp))
+
                             Text(
-                                text = "2. Se o vídeo já for H.264 e só o áudio for incompatível (rápido):",
+                                text = "Opção 3. Se o vídeo já for H.264 e só o áudio for incompatível (rápido):",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = TextSecondary,
                                 fontSize = 11.sp

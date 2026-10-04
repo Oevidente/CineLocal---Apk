@@ -682,7 +682,7 @@ class CastManager private constructor(private val context: Context) {
             val deviceModel = castSession?.castDevice?.modelName
             val deviceName = castSession?.castDevice?.friendlyName
 
-            val compatResult = CastCompatibility.checkCompatibility(deviceModel, deviceName, probeResult)
+            val compatResult = CastCompatibility.checkCompatibility(deviceModel, deviceName, probeResult, probeUri)
 
             if (!compatResult.isCompatible && compatResult.warningMessage != null) {
                 pendingIncompatibleAction = {
