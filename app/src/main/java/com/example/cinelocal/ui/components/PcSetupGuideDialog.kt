@@ -24,6 +24,7 @@ import androidx.compose.material.icons.filled.HelpOutline
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.LockOpen
 import androidx.compose.material.icons.filled.Router
+import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.Wifi
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -84,13 +85,13 @@ fun PcSetupGuideDialog(
                 Spacer(modifier = Modifier.width(12.dp))
                 Column {
                     Text(
-                        text = "Como Preparar o PC",
+                        text = "Como Preparar o PC (Windows)",
                         style = MaterialTheme.typography.titleLarge,
                         fontWeight = FontWeight.Bold,
                         color = TextPrimary
                     )
                     Text(
-                        text = "Passo a passo no Windows para liberar suas pastas",
+                        text = "Passo a passo para liberar pastas e evitar lista vazia",
                         style = MaterialTheme.typography.bodySmall,
                         color = TextSecondary,
                         fontSize = 11.sp
@@ -104,7 +105,7 @@ fun PcSetupGuideDialog(
                     .fillMaxWidth()
                     .verticalScroll(rememberScrollState())
             ) {
-                // Aviso de mesma rede
+                // Aviso de mesma rede Wi-Fi
                 Card(
                     colors = CardDefaults.cardColors(containerColor = Color(0xFF1E293B)),
                     shape = RoundedCornerShape(8.dp),
@@ -122,7 +123,7 @@ fun PcSetupGuideDialog(
                         )
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(
-                            text = "Importante: Seu celular e seu computador devem estar conectados no mesmo roteador / rede Wi-Fi!",
+                            text = "Importante: Celular e computador devem estar conectados no mesmo roteador / Wi-Fi!",
                             style = MaterialTheme.typography.bodySmall,
                             color = Color(0xFFE2E8F0),
                             fontSize = 11.sp,
@@ -133,55 +134,54 @@ fun PcSetupGuideDialog(
 
                 Spacer(modifier = Modifier.height(14.dp))
 
-                // Passo 1
+                // Passo 1: Descoberta de Rede
                 StepItemCard(
                     stepNumber = "1",
                     icon = Icons.Default.Router,
                     title = "Ativar Descoberta de Rede no Windows",
-                    description = "1. Abra as Configurações do Windows (ou Painel de Controle).\n" +
-                            "2. Vá em Rede e Internet > Configurações avançadas de rede > Compartilhamento avançado.\n" +
-                            "3. Ative as opções:\n" +
-                            "   • 'Descoberta de rede'\n" +
-                            "   • 'Compartilhamento de arquivos e impressoras'\n" +
-                            "4. Certifique-se de que a rede está definida como 'Rede Privada'."
+                    description = "1. Abra Configurações do Windows > Rede e Internet > Configurações avançadas de rede > Compartilhamento avançado.\n" +
+                            "2. Marque a sua rede como 'Rede Privada'.\n" +
+                            "3. Ative 'Descoberta de rede' e 'Compartilhamento de arquivos e impressoras'.\n" +
+                            "4. Em 'Todas as redes', se desejar acesso sem senha, marque 'Desativar compartilhamento protegido por senha'."
                 )
 
                 Spacer(modifier = Modifier.height(12.dp))
 
-                // Passo 2
+                // Passo 2: Compartilhar Pasta
                 StepItemCard(
                     stepNumber = "2",
                     icon = Icons.Default.FolderShared,
-                    title = "Compartilhar a Pasta de Filmes / Vídeos",
-                    description = "1. No Windows Explorer, clique com o botão direito na pasta que contém seus vídeos (ex: C:\\Filmes).\n" +
-                            "2. Selecione Propriedades > Aba Compartilhamento.\n" +
-                            "3. Clique no botão 'Compartilhar...'.\n" +
-                            "4. No campo de texto, digite 'Todos' (ou selecione seu usuário) e clique em Adicionar.\n" +
-                            "5. Defina a permissão como 'Leitura' e clique em Compartilhar."
+                    title = "Aba Compartilhamento (Nome da Pasta)",
+                    description = "1. Clique com o botão direito na pasta de vídeos (ex: C:\\Filmes) > Propriedades > Aba Compartilhamento.\n" +
+                            "2. Clique em 'Compartilhamento Avançado...'.\n" +
+                            "3. Marque 'Compartilhar esta pasta' e anote o nome do compartilhamento (ex: Filmes).\n" +
+                            "4. Clique em 'Permissões' > Verifique se 'Todos' está adicionado com permissão de 'Leitura' marcada."
                 )
 
                 Spacer(modifier = Modifier.height(12.dp))
 
-                // Passo 3
+                // Passo 3: Segurança NTFS (Crítico no Windows 10/11)
                 StepItemCard(
                     stepNumber = "3",
-                    icon = Icons.Default.Info,
-                    title = "Como Saber o IP do Computador",
-                    description = "1. No teclado, pressione Win + R, digite cmd e aperte Enter.\n" +
-                            "2. Na tela preta, digite: ipconfig e tecle Enter.\n" +
-                            "3. Veja o número no campo 'Endereço IPv4' (exemplo: 192.168.1.15).\n" +
-                            "4. Esse é o endereço que você pode usar para conectar!"
+                    icon = Icons.Default.Security,
+                    title = "Aba Segurança (Crítico para não ficar vazio)",
+                    description = "⚠️ No Windows 10 e 11, se esta etapa for esquecida a pasta fica vazia no app:\n" +
+                            "1. Na mesma janela de Propriedades da pasta, clique na aba 'Segurança'.\n" +
+                            "2. Clique no botão 'Editar...'.\n" +
+                            "3. Se o usuário 'Todos' (ou 'Everyone') não estiver na lista, clique em 'Adicionar...', digite Todos e dê OK.\n" +
+                            "4. Selecione 'Todos' e certifique-se de marcar 'Leitura e execução' e 'Listar conteúdo da pasta'. Clique em Aplicar e OK."
                 )
 
                 Spacer(modifier = Modifier.height(12.dp))
 
-                // Passo 4
+                // Passo 4: IP e Conexão
                 StepItemCard(
                     stepNumber = "4",
-                    icon = Icons.Default.LockOpen,
-                    title = "Usuário e Senha de Acesso",
-                    description = "• Se o Windows pedir senha: use o nome do seu usuário do Windows e a senha que você usa para entrar no PC.\n" +
-                            "• Se quiser acesso livre sem senha: no Compartilhamento Avançado do Windows, marque 'Desativar compartilhamento protegido por senha' e marque 'Acesso Anônimo/Convidado' no app."
+                    icon = Icons.Default.Info,
+                    title = "Como Acessar no CineLocal",
+                    description = "1. Pressione Win + R no PC, digite cmd e tecle Enter. Digite 'ipconfig' para ver seu IPv4 (ex: 192.168.1.15).\n" +
+                            "2. No CineLocal, use 'Buscar PCs Wi-Fi' ou 'Conectar por IP'.\n" +
+                            "3. Se seu compartilhamento tiver um nome customizado, toque em 'Adicionar Compartilhamento' no topo do app e digite o nome."
                 )
             }
         },

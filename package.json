@@ -1,6 +1,6 @@
 {
   "name": "cinelocal",
-  "version": "1.6.1",
+  "version": "1.6.2",
   "private": true,
   "scripts": {
     "build": "node -e \"console.log('CineLocal Android APK & components build verification passed.')\"",

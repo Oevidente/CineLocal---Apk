@@ -29,14 +29,17 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Computer
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Download
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.FolderOpen
-import androidx.compose.material.icons.filled.FolderZip
 import androidx.compose.material.icons.filled.HelpOutline
+import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.LockOpen
 import androidx.compose.material.icons.filled.Movie
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.Storage
 import androidx.compose.material.icons.filled.VideoLibrary
 import androidx.compose.material.icons.filled.Wifi
@@ -47,7 +50,6 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -59,15 +61,12 @@ import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
-import androidx.compose.material3.Tab
-import androidx.compose.material3.TabRow
-import androidx.compose.material3.TabRowDefaults
-import androidx.compose.material3.TabRowDefaults.tabIndicatorOffset
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -86,7 +85,6 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import com.example.cinelocal.data.model.NetworkServerEntity
 import com.example.cinelocal.data.scanner.MediaNameParser
-import com.example.cinelocal.data.scanner.SmbFolderScanner
 import com.example.cinelocal.data.smb.DiscoveredPc
 import com.example.cinelocal.data.smb.NetworkDiscovery
 import com.example.cinelocal.data.smb.SmbClientManager
@@ -100,9 +98,7 @@ import com.example.cinelocal.ui.theme.DarkSurface
 import com.example.cinelocal.ui.theme.DarkSurfaceVariant
 import com.example.cinelocal.ui.theme.TextPrimary
 import com.example.cinelocal.ui.theme.TextSecondary
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 import java.util.Locale
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -121,6 +117,8 @@ fun SmbExplorerDialog(
     // Estados gerais
     var showGuideDialog by remember { mutableStateOf(false) }
     var showManualAddDialog by remember { mutableStateOf(false) }
+    var showAddCustomShareDialog by remember { mutableStateOf(false) }
+    var showEditAuthDialog by remember { mutableStateOf(false) }
 
     // Estado da descoberta de rede
     var isScanningNetwork by remember { mutableStateOf(false) }
@@ -133,16 +131,15 @@ fun SmbExplorerDialog(
     var currentShare by remember { mutableStateOf<String?>(null) }
     var currentPath by remember { mutableStateOf("") }
 
+    // Compartilhamentos customizados adicionados pelo usuário
+    val customShares = remember { mutableStateListOf<String>() }
+
     // Estados do navegador de pastas
     var sharesList by remember { mutableStateOf<List<SmbShareItem>>(emptyList()) }
     var filesList by remember { mutableStateOf<List<SmbFileItem>>(emptyList()) }
     var isLoadingContent by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
     var successMessage by remember { mutableStateOf<String?>(null) }
-
-    // Estado de catalogação em andamento
-    var isCataloging by remember { mutableStateOf(false) }
-    var catalogProgressText by remember { mutableStateOf("") }
 
     // Função para carregar conteúdo da pasta atual
     fun loadDirectory(config: SmbConnectionConfig, share: String, path: String) {
@@ -155,7 +152,13 @@ fun SmbExplorerDialog(
                 currentShare = share
                 currentPath = path
             } catch (e: Exception) {
-                errorMessage = "Erro ao acessar pasta: ${e.message}"
+                val msg = when {
+                    e.message?.contains("STATUS_ACCESS_DENIED", ignoreCase = true) == true ||
+                    e.message?.contains("Access is denied", ignoreCase = true) == true ->
+                        "Acesso negado no Windows para esta pasta. No PC, abra Propriedades da pasta > aba Segurança > adicione o usuário 'Todos' com permissão de Leitura."
+                    else -> "Erro ao acessar pasta: ${e.localizedMessage ?: e.message}"
+                }
+                errorMessage = msg
             } finally {
                 isLoadingContent = false
             }
@@ -168,7 +171,7 @@ fun SmbExplorerDialog(
         errorMessage = null
         scope.launch {
             try {
-                val shares = SmbClientManager.listShares(config)
+                val shares = SmbClientManager.listShares(config, customShares.toList())
                 sharesList = shares
                 currentShare = null
                 currentPath = ""
@@ -223,19 +226,19 @@ fun SmbExplorerDialog(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.weight(1f, fill = false)
+                    ) {
                         if (activeServer != null) {
                             IconButton(
                                 onClick = {
                                     if (currentPath.isNotBlank()) {
-                                        // Voltar um nível de pasta
                                         val parent = currentPath.substringBeforeLast('/', "")
                                         loadDirectory(activeConfig!!, currentShare!!, parent)
                                     } else if (currentShare != null) {
-                                        // Voltar para lista de shares
                                         loadShares(activeConfig!!)
                                     } else {
-                                        // Voltar para lista de computadores
                                         activeServer = null
                                         activeConfig = null
                                     }
@@ -265,7 +268,7 @@ fun SmbExplorerDialog(
                             Spacer(modifier = Modifier.width(12.dp))
                         }
 
-                        Column {
+                        Column(modifier = Modifier.padding(end = 8.dp)) {
                             Text(
                                 text = if (activeServer != null) {
                                     if (currentShare != null) "${activeServer!!.name} > $currentShare" else activeServer!!.name
@@ -278,7 +281,7 @@ fun SmbExplorerDialog(
                             )
                             Text(
                                 text = if (activeServer != null) {
-                                    if (currentPath.isNotBlank()) "/$currentPath" else "Compartilhamentos disponíveis"
+                                    if (currentPath.isNotBlank()) "/$currentPath" else "IP: ${activeServer!!.host} • ${if (activeServer!!.isAnonymous) "Acesso Convidado/Sem Senha" else "Usuário: ${activeServer!!.username}"}"
                                 } else "Acesse pastas e vídeos do computador pela Wi-Fi",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = TextSecondary,
@@ -290,6 +293,20 @@ fun SmbExplorerDialog(
                     }
 
                     Row(verticalAlignment = Alignment.CenterVertically) {
+                        if (activeServer != null) {
+                            IconButton(
+                                onClick = { showEditAuthDialog = true },
+                                modifier = Modifier.testTag("edit_server_auth_button")
+                            ) {
+                                Icon(
+                                    imageVector = if (activeServer!!.isAnonymous) Icons.Default.LockOpen else Icons.Default.Lock,
+                                    contentDescription = "Alterar Login do PC",
+                                    tint = if (activeServer!!.isAnonymous) Color(0xFF38BDF8) else CineRed,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
+                        }
+
                         IconButton(
                             onClick = { showGuideDialog = true },
                             modifier = Modifier.testTag("open_pc_guide_button")
@@ -336,10 +353,16 @@ fun SmbExplorerDialog(
                                 modifier = Modifier.weight(1f)
                             )
                             IconButton(
-                                onClick = { errorMessage = null },
-                                modifier = Modifier.size(24.dp)
+                                onClick = { showGuideDialog = true },
+                                modifier = Modifier.size(28.dp)
                             ) {
-                                Icon(Icons.Default.Close, contentDescription = null, tint = Color.White, modifier = Modifier.size(16.dp))
+                                Icon(Icons.Default.HelpOutline, contentDescription = "Guia", tint = Color.White, modifier = Modifier.size(16.dp))
+                            }
+                            IconButton(
+                                onClick = { errorMessage = null },
+                                modifier = Modifier.size(28.dp)
+                            ) {
+                                Icon(Icons.Default.Close, contentDescription = "Fechar", tint = Color.White, modifier = Modifier.size(16.dp))
                             }
                         }
                     }
@@ -369,14 +392,14 @@ fun SmbExplorerDialog(
                     }
                 }
 
-                // Corpo do diálogo: Se não tiver servidor ativo -> Tela de seleção/descoberta de PCs
+                // Corpo do diálogo
                 if (activeServer == null) {
+                    // Seleção / Descoberta de Servidores
                     Column(
                         modifier = Modifier
                             .fillMaxSize()
                             .weight(1f)
                     ) {
-                        // Ações de conexão
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -432,7 +455,6 @@ fun SmbExplorerDialog(
                             modifier = Modifier.fillMaxSize(),
                             verticalArrangement = Arrangement.spacedBy(10.dp)
                         ) {
-                            // Computadores descobertos na rede
                             if (discoveredPcs.isNotEmpty()) {
                                 item {
                                     Text(
@@ -529,7 +551,6 @@ fun SmbExplorerDialog(
                                 }
                             }
 
-                            // Computadores salvos
                             item {
                                 Text(
                                     text = "MEUS COMPUTADORES SALVOS",
@@ -626,7 +647,7 @@ fun SmbExplorerDialog(
                                                         fontWeight = FontWeight.Bold
                                                     )
                                                     Text(
-                                                        text = "${server.host} • ${if (server.isAnonymous) "Acesso Anônimo" else "Usuário: ${server.username}"}",
+                                                        text = "${server.host} • ${if (server.isAnonymous) "Acesso Convidado/Sem Senha" else "Usuário: ${server.username}"}",
                                                         style = MaterialTheme.typography.bodySmall,
                                                         color = TextSecondary,
                                                         fontSize = 11.sp
@@ -678,8 +699,8 @@ fun SmbExplorerDialog(
                             .fillMaxSize()
                             .weight(1f)
                     ) {
-                        // Se estiver dentro de um compartilhamento, exibir botão de catalogar pasta
                         if (currentShare != null) {
+                            // Estamos dentro de uma pasta/share
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
@@ -722,6 +743,46 @@ fun SmbExplorerDialog(
                                     )
                                 }
                             }
+                        } else {
+                            // Lista de Compartilhamentos (Shares)
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(bottom = 10.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Button(
+                                    onClick = { showAddCustomShareDialog = true },
+                                    colors = ButtonDefaults.buttonColors(containerColor = CineRed),
+                                    shape = RoundedCornerShape(8.dp),
+                                    modifier = Modifier.testTag("add_custom_share_button")
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Add,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(16.dp),
+                                        tint = Color.White
+                                    )
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text(
+                                        text = "Digitar Nome da Pasta (Share)",
+                                        fontSize = 12.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = Color.White
+                                    )
+                                }
+
+                                IconButton(
+                                    onClick = { loadShares(activeConfig!!) }
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Refresh,
+                                        contentDescription = "Atualizar",
+                                        tint = TextSecondary
+                                    )
+                                }
+                            }
                         }
 
                         if (isLoadingContent) {
@@ -742,7 +803,7 @@ fun SmbExplorerDialog(
                                 }
                             }
                         } else if (currentShare == null) {
-                            // Lista de Compartilhamentos (Shares)
+                            // Lista de Compartilhamentos
                             LazyColumn(
                                 modifier = Modifier
                                     .fillMaxSize()
@@ -751,7 +812,7 @@ fun SmbExplorerDialog(
                             ) {
                                 item {
                                     Text(
-                                        text = "PASTAS COMPARTILHADAS (SHARES)",
+                                        text = "PASTAS COMPARTILHADAS DETECTADAS",
                                         style = MaterialTheme.typography.labelSmall,
                                         color = TextSecondary,
                                         fontWeight = FontWeight.Bold
@@ -772,37 +833,85 @@ fun SmbExplorerDialog(
                                             modifier = Modifier
                                                 .fillMaxWidth()
                                                 .padding(14.dp),
-                                            verticalAlignment = Alignment.CenterVertically
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.SpaceBetween
                                         ) {
-                                            Icon(
-                                                imageVector = Icons.Default.FolderOpen,
-                                                contentDescription = null,
-                                                tint = Color(0xFF38BDF8),
-                                                modifier = Modifier.size(28.dp)
-                                            )
-                                            Spacer(modifier = Modifier.width(12.dp))
-                                            Column {
-                                                Text(
-                                                    text = share.name,
-                                                    style = MaterialTheme.typography.titleMedium,
-                                                    color = TextPrimary,
-                                                    fontWeight = FontWeight.Bold
+                                            Row(
+                                                modifier = Modifier.weight(1f),
+                                                verticalAlignment = Alignment.CenterVertically
+                                            ) {
+                                                Icon(
+                                                    imageVector = Icons.Default.FolderOpen,
+                                                    contentDescription = null,
+                                                    tint = Color(0xFF38BDF8),
+                                                    modifier = Modifier.size(28.dp)
                                                 )
-                                                if (!share.comment.isNullOrBlank()) {
+                                                Spacer(modifier = Modifier.width(12.dp))
+                                                Column {
                                                     Text(
-                                                        text = share.comment,
-                                                        style = MaterialTheme.typography.bodySmall,
-                                                        color = TextSecondary,
-                                                        fontSize = 11.sp
+                                                        text = share.name,
+                                                        style = MaterialTheme.typography.titleMedium,
+                                                        color = TextPrimary,
+                                                        fontWeight = FontWeight.Bold
                                                     )
+                                                    if (!share.comment.isNullOrBlank()) {
+                                                        Text(
+                                                            text = share.comment,
+                                                            style = MaterialTheme.typography.bodySmall,
+                                                            color = TextSecondary,
+                                                            fontSize = 11.sp
+                                                        )
+                                                    }
                                                 }
                                             }
+
+                                            Icon(
+                                                imageVector = Icons.AutoMirrored.Filled.ArrowForward,
+                                                contentDescription = null,
+                                                tint = TextSecondary,
+                                                modifier = Modifier.size(18.dp)
+                                            )
+                                        }
+                                    }
+                                }
+
+                                item {
+                                    Card(
+                                        colors = CardDefaults.cardColors(containerColor = DarkSurface),
+                                        shape = RoundedCornerShape(8.dp),
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(top = 8.dp)
+                                    ) {
+                                        Column(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .padding(14.dp)
+                                        ) {
+                                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                                Icon(Icons.Default.Security, contentDescription = null, tint = Color(0xFFFBBF24), modifier = Modifier.size(18.dp))
+                                                Spacer(modifier = Modifier.width(8.dp))
+                                                Text(
+                                                    text = "Sua pasta não apareceu ou deu acesso negado?",
+                                                    style = MaterialTheme.typography.bodySmall,
+                                                    fontWeight = FontWeight.Bold,
+                                                    color = Color(0xFFFBBF24)
+                                                )
+                                            }
+                                            Spacer(modifier = Modifier.height(4.dp))
+                                            Text(
+                                                text = "1. Toque em 'Digitar Nome da Pasta' acima e informe o nome exato compartilhado no PC.\n2. No Windows, verifique se adicionou 'Todos' na aba Segurança (NTFS) da pasta.",
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = TextSecondary,
+                                                fontSize = 11.sp,
+                                                lineHeight = 16.sp
+                                            )
                                         }
                                     }
                                 }
                             }
                         } else {
-                            // Lista de Arquivos e Pastas dentro do Share
+                            // Lista de Arquivos dentro do Share
                             if (filesList.isEmpty()) {
                                 Box(
                                     modifier = Modifier
@@ -810,11 +919,38 @@ fun SmbExplorerDialog(
                                         .weight(1f),
                                     contentAlignment = Alignment.Center
                                 ) {
-                                    Text(
-                                        text = "Nenhum arquivo ou subpasta nesta pasta.",
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        color = TextSecondary
-                                    )
+                                    Column(
+                                        horizontalAlignment = Alignment.CenterHorizontally,
+                                        modifier = Modifier.padding(20.dp)
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.FolderOpen,
+                                            contentDescription = null,
+                                            tint = TextSecondary,
+                                            modifier = Modifier.size(48.dp)
+                                        )
+                                        Spacer(modifier = Modifier.height(10.dp))
+                                        Text(
+                                            text = "Nenhum arquivo de vídeo encontrado nesta pasta.",
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            color = TextPrimary,
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                        Spacer(modifier = Modifier.height(6.dp))
+                                        Text(
+                                            text = "Se há vídeos no PC mas não aparecem aqui, certifique-se de liberar a permissão 'Todos' na aba Segurança da pasta no Windows.",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = TextSecondary,
+                                            fontSize = 12.sp
+                                        )
+                                        Spacer(modifier = Modifier.height(12.dp))
+                                        Button(
+                                            onClick = { showGuideDialog = true },
+                                            colors = ButtonDefaults.buttonColors(containerColor = DarkSurfaceVariant)
+                                        ) {
+                                            Text("Ver Como Liberar no Windows", color = Color(0xFF38BDF8), fontSize = 12.sp)
+                                        }
+                                    }
                                 }
                             } else {
                                 LazyColumn(
@@ -825,7 +961,6 @@ fun SmbExplorerDialog(
                                 ) {
                                     items(filesList) { item ->
                                         if (item.isDirectory) {
-                                            // Item Diretório
                                             Card(
                                                 modifier = Modifier
                                                     .fillMaxWidth()
@@ -864,7 +999,6 @@ fun SmbExplorerDialog(
                                                 }
                                             }
                                         } else {
-                                            // Item Arquivo de Vídeo ou Outro
                                             Card(
                                                 modifier = Modifier.fillMaxWidth(),
                                                 colors = CardDefaults.cardColors(containerColor = DarkSurfaceVariant.copy(alpha = 0.8f)),
@@ -942,7 +1076,7 @@ fun SmbExplorerDialog(
         }
     }
 
-    // Modal de Cadastro Manual de Computador
+    // Modal de Cadastro Manual de Computador (IP)
     if (showManualAddDialog) {
         var hostInput by remember { mutableStateOf("") }
         var nameInput by remember { mutableStateOf("") }
@@ -1004,7 +1138,7 @@ fun SmbExplorerDialog(
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
                         Text(
-                            text = "Acesso Anônimo / Convidado",
+                            text = "Acesso Sem Senha / Convidado",
                             style = MaterialTheme.typography.bodyMedium,
                             color = TextPrimary
                         )
@@ -1022,7 +1156,7 @@ fun SmbExplorerDialog(
                             value = userInput,
                             onValueChange = { userInput = it },
                             label = { Text("Usuário do Windows") },
-                            placeholder = { Text("Ex: andre ou andre@email.com") },
+                            placeholder = { Text("Ex: andre") },
                             singleLine = true,
                             modifier = Modifier.fillMaxWidth(),
                             colors = OutlinedTextFieldDefaults.colors(
@@ -1056,7 +1190,7 @@ fun SmbExplorerDialog(
                     onClick = {
                         if (hostInput.isNotBlank()) {
                             val server = NetworkServerEntity(
-                                name = nameInput.ifBlank { "PC ($hostInput)" },
+                                name = nameInput.ifBlank { "PC (${hostInput.trim()})" },
                                 host = hostInput.trim(),
                                 username = userInput.trim(),
                                 password = passwordInput,
@@ -1092,13 +1226,224 @@ fun SmbExplorerDialog(
         )
     }
 
+    // Modal de Digitar Nome de Compartilhamento (Share)
+    if (showAddCustomShareDialog && activeConfig != null) {
+        var customShareInput by remember { mutableStateOf("") }
+        var isTestingShare by remember { mutableStateOf(false) }
+        var testError by remember { mutableStateOf<String?>(null) }
+
+        AlertDialog(
+            onDismissRequest = { if (!isTestingShare) showAddCustomShareDialog = false },
+            containerColor = DarkSurface,
+            title = {
+                Text(
+                    text = "Acessar Compartilhamento (Pasta)",
+                    style = MaterialTheme.typography.titleLarge,
+                    color = TextPrimary,
+                    fontWeight = FontWeight.Bold
+                )
+            },
+            text = {
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    Text(
+                        text = "Digite o nome exato da pasta que você compartilhou no Windows (ex: Filmes, Videos, Series, ou C$).",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = TextSecondary
+                    )
+                    Spacer(modifier = Modifier.height(10.dp))
+                    OutlinedTextField(
+                        value = customShareInput,
+                        onValueChange = {
+                            customShareInput = it
+                            testError = null
+                        },
+                        label = { Text("Nome do Compartilhamento") },
+                        placeholder = { Text("Ex: Filmes ou Videos") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = CineRed,
+                            unfocusedBorderColor = DarkSurfaceVariant,
+                            focusedTextColor = TextPrimary,
+                            unfocusedTextColor = TextPrimary
+                        )
+                    )
+
+                    if (testError != null) {
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            text = testError!!,
+                            color = Color(0xFFEF4444),
+                            style = MaterialTheme.typography.bodySmall,
+                            fontSize = 12.sp
+                        )
+                    }
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        val shareName = customShareInput.trim().trim('/', '\\')
+                        if (shareName.isNotBlank()) {
+                            isTestingShare = true
+                            testError = null
+                            scope.launch {
+                                val result = SmbClientManager.testAndConnectShare(activeConfig!!, shareName)
+                                isTestingShare = false
+                                if (result.isSuccess) {
+                                    if (!customShares.contains(shareName)) {
+                                        customShares.add(shareName)
+                                    }
+                                    showAddCustomShareDialog = false
+                                    loadDirectory(activeConfig!!, shareName, "")
+                                } else {
+                                    testError = result.exceptionOrNull()?.message ?: "Não foi possível acessar a pasta."
+                                }
+                            }
+                        }
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = CineRed),
+                    enabled = customShareInput.isNotBlank() && !isTestingShare
+                ) {
+                    if (isTestingShare) {
+                        CircularProgressIndicator(color = Color.White, modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text("Verificando...", color = Color.White)
+                    } else {
+                        Text("Acessar Pasta", color = Color.White)
+                    }
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = { showAddCustomShareDialog = false },
+                    enabled = !isTestingShare
+                ) {
+                    Text("Cancelar", color = TextSecondary)
+                }
+            }
+        )
+    }
+
+    // Modal de Alteração Rápida de Login do PC
+    if (showEditAuthDialog && activeServer != null) {
+        var isAnonymous by remember { mutableStateOf(activeServer!!.isAnonymous) }
+        var userInput by remember { mutableStateOf(activeServer!!.username) }
+        var passwordInput by remember { mutableStateOf(activeServer!!.password) }
+
+        AlertDialog(
+            onDismissRequest = { showEditAuthDialog = false },
+            containerColor = DarkSurface,
+            title = {
+                Text(
+                    text = "Autenticação no Computador",
+                    style = MaterialTheme.typography.titleLarge,
+                    color = TextPrimary,
+                    fontWeight = FontWeight.Bold
+                )
+            },
+            text = {
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text(
+                            text = "Acesso Sem Senha / Convidado",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = TextPrimary
+                        )
+                        Switch(
+                            checked = isAnonymous,
+                            onCheckedChange = { isAnonymous = it },
+                            colors = SwitchDefaults.colors(checkedThumbColor = CineRed, checkedTrackColor = CineRed.copy(alpha = 0.5f))
+                        )
+                    }
+
+                    if (!isAnonymous) {
+                        Spacer(modifier = Modifier.height(10.dp))
+
+                        OutlinedTextField(
+                            value = userInput,
+                            onValueChange = { userInput = it },
+                            label = { Text("Usuário do Windows") },
+                            placeholder = { Text("Ex: andre") },
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedBorderColor = CineRed,
+                                unfocusedBorderColor = DarkSurfaceVariant,
+                                focusedTextColor = TextPrimary,
+                                unfocusedTextColor = TextPrimary
+                            )
+                        )
+
+                        Spacer(modifier = Modifier.height(8.dp))
+
+                        OutlinedTextField(
+                            value = passwordInput,
+                            onValueChange = { passwordInput = it },
+                            label = { Text("Senha do Windows") },
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedBorderColor = CineRed,
+                                unfocusedBorderColor = DarkSurfaceVariant,
+                                focusedTextColor = TextPrimary,
+                                unfocusedTextColor = TextPrimary
+                            )
+                        )
+                    }
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        val updated = activeServer!!.copy(
+                            isAnonymous = isAnonymous,
+                            username = userInput.trim(),
+                            password = passwordInput
+                        )
+                        onSaveServer(updated)
+                        activeServer = updated
+                        val newConfig = SmbConnectionConfig(
+                            host = updated.host,
+                            port = updated.port,
+                            username = updated.username,
+                            password = updated.password,
+                            domain = updated.domain,
+                            isAnonymous = updated.isAnonymous
+                        )
+                        activeConfig = newConfig
+                        SmbClientManager.invalidateSession(newConfig)
+                        showEditAuthDialog = false
+                        loadShares(newConfig)
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = CineRed)
+                ) {
+                    Text("Aplicar e Reconectar", color = Color.White)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showEditAuthDialog = false }) {
+                    Text("Cancelar", color = TextSecondary)
+                }
+            }
+        )
+    }
+
     // Modal do Guia de Preparação do PC
     if (showGuideDialog) {
         PcSetupGuideDialog(
             onDismiss = { showGuideDialog = false },
             onReadyToConnect = {
                 showGuideDialog = false
-                startNetworkScan()
+                if (activeServer == null) {
+                    startNetworkScan()
+                } else {
+                    loadShares(activeConfig!!)
+                }
             }
         )
     }

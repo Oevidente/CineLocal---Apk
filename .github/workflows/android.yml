@@ -78,11 +78,12 @@ jobs:
 
       - name: Nomear APK
         run: |
+          VERSION=$(grep -oP 'versionName = "\K[^"]+' app/build.gradle.kts)
           mkdir -p dist apk
           cp app/build/outputs/apk/debug/app-debug.apk dist/CineLocal-debug.apk
           cp app/build/outputs/apk/debug/app-debug.apk apk/CineLocal-debug.apk
           cp app/build/outputs/apk/debug/app-debug.apk apk/CineLocal.apk
-          cp app/build/outputs/apk/debug/app-debug.apk apk/CineLocal-v1.6.1.apk
+          cp app/build/outputs/apk/debug/app-debug.apk apk/CineLocal-v${VERSION}.apk
           ls -la dist/
           ls -la apk/
 
@@ -99,7 +100,7 @@ jobs:
           name: CineLocal-APK
           path: |
             dist/CineLocal-debug.apk
-            apk/CineLocal-v1.6.1.apk
+            apk/CineLocal*.apk
           retention-days: 30
 
       - name: Publicar Release "latest"

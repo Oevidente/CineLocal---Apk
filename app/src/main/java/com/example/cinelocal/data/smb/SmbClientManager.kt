@@ -81,17 +81,27 @@ object SmbClientManager {
         } catch (_: Exception) {}
 
         val connection = smbClient.connect(config.host, config.port)
-        val auth = if (config.isAnonymous || config.username.isBlank()) {
-            AuthenticationContext.anonymous()
+        val session = if (config.isAnonymous || config.username.isBlank()) {
+            // Tenta estratégias progressivas de autenticação não protegida no Windows
+            try {
+                connection.authenticate(AuthenticationContext("Guest", CharArray(0), ""))
+            } catch (e1: Exception) {
+                try {
+                    connection.authenticate(AuthenticationContext.anonymous())
+                } catch (e2: Exception) {
+                    connection.authenticate(AuthenticationContext("", CharArray(0), ""))
+                }
+            }
         } else {
-            AuthenticationContext(
-                config.username.trim(),
-                config.password.toCharArray(),
-                config.domain.trim()
+            connection.authenticate(
+                AuthenticationContext(
+                    config.username.trim(),
+                    config.password.toCharArray(),
+                    config.domain.trim()
+                )
             )
         }
 
-        val session = connection.authenticate(auth)
         activeSessions[key] = Pair(connection, session)
         return session
     }
@@ -110,18 +120,64 @@ object SmbClientManager {
             }
         } catch (e: Exception) {
             Log.e(TAG, "Erro testando conexão com ${config.host}", e)
-            Result.failure(e)
+            val cleanMsg = when {
+                e.message?.contains("STATUS_LOGON_FAILURE", ignoreCase = true) == true ->
+                    "Falha no logon do Windows. Se a conta exigir senha, informe seu usuário e senha do Windows."
+                e.message?.contains("STATUS_ACCESS_DENIED", ignoreCase = true) == true ->
+                    "Acesso negado pelo Windows. Adicione 'Todos' na aba Compartilhamento e Segurança da pasta."
+                e.message?.contains("Connection refused", ignoreCase = true) == true ->
+                    "Conexão recusada na porta 445. Verifique se o compartilhamento de arquivos está ativo no Windows."
+                else -> e.localizedMessage ?: "Erro ao conectar no computador."
+            }
+            Result.failure(Exception(cleanMsg))
         }
     }
 
-    suspend fun listShares(config: SmbConnectionConfig): List<SmbShareItem> = withContext(Dispatchers.IO) {
+    suspend fun testAndConnectShare(
+        config: SmbConnectionConfig,
+        shareName: String
+    ): Result<SmbShareItem> = withContext(Dispatchers.IO) {
+        val cleanShare = shareName.trim().trim('/', '\\').replace('\\', '/')
+        if (cleanShare.isBlank()) {
+            return@withContext Result.failure(IllegalArgumentException("Nome do compartilhamento não pode ser vazio."))
+        }
         try {
-            // Em SMB, alguns compartilhamentos administrativos padrão terminam em $
-            // e outros são compartilhamentos de mídia/arquivos
-            val commonShares = listOf(
-                "Filmes", "Series", "Videos", "Downloads", "Users", "Public", "Media",
-                "Compartilhado", "Musicas", "C", "D", "E", "C$", "D$"
-            )
+            val session = getOrCreateSession(config)
+            val share = session.connectShare(cleanShare) as? DiskShare
+                ?: return@withContext Result.failure(Exception("O compartilhamento '$cleanShare' não é um compartilhamento de arquivos."))
+            try {
+                share.list("")
+            } catch (_: Exception) {
+                // Algumas pastas podem não listar raiz mas estarem ativas
+            } finally {
+                try { share.close() } catch (_: Exception) {}
+            }
+            Result.success(SmbShareItem(name = cleanShare, comment = "Compartilhamento ativo"))
+        } catch (e: Exception) {
+            Log.e(TAG, "Falha ao conectar no compartilhamento '$cleanShare' em ${config.host}", e)
+            val msg = when {
+                e.message?.contains("STATUS_ACCESS_DENIED", ignoreCase = true) == true ||
+                e.message?.contains("Access is denied", ignoreCase = true) == true ->
+                    "Acesso negado no Windows para '$cleanShare'. Certifique-se de liberar 'Todos' na aba Segurança (NTFS) e Compartilhamento no PC."
+                e.message?.contains("STATUS_BAD_NETWORK_NAME", ignoreCase = true) == true ||
+                e.message?.contains("not found", ignoreCase = true) == true ->
+                    "Compartilhamento '$cleanShare' não encontrado. Verifique se o nome digitado confere com o nome compartilhado no Windows."
+                else -> "Erro ao acessar '$cleanShare': ${e.localizedMessage ?: e.message}"
+            }
+            Result.failure(Exception(msg))
+        }
+    }
+
+    suspend fun listShares(
+        config: SmbConnectionConfig,
+        customShares: List<String> = emptyList()
+    ): List<SmbShareItem> = withContext(Dispatchers.IO) {
+        try {
+            val commonShares = (listOf(
+                "Filmes", "Series", "Séries", "Videos", "Vídeos", "Downloads", "Users", "Public", "Media",
+                "Compartilhado", "Musicas", "Músicas", "Animes", "Cinema", "Novelas", "Shared", "Movies",
+                "TV", "CineLocal", "CinemaLocal", "C", "D", "E", "F", "C$", "D$", "E$"
+            ) + customShares).distinct()
 
             val accessibleShares = mutableListOf<SmbShareItem>()
             val session = getOrCreateSession(config)
@@ -130,7 +186,7 @@ object SmbClientManager {
                 try {
                     val share = session.connectShare(shareName) as? DiskShare
                     if (share != null) {
-                        accessibleShares.add(SmbShareItem(name = shareName))
+                        accessibleShares.add(SmbShareItem(name = shareName, comment = "Pasta compartilhada"))
                         share.close()
                     }
                 } catch (_: Exception) {
@@ -139,9 +195,9 @@ object SmbClientManager {
             }
 
             if (accessibleShares.isEmpty()) {
-                // Tenta compartilhamentos genéricos comuns
-                listOf("Users", "Public", "Compartilhado").forEach { fallback ->
-                    accessibleShares.add(SmbShareItem(name = fallback, comment = "Tente conectar ou informe o nome exato"))
+                // Sugestões amigáveis com indicação para adicionar nome manual
+                listOf("Filmes", "Series", "Videos", "Users", "Public", "Compartilhado").forEach { fallback ->
+                    accessibleShares.add(SmbShareItem(name = fallback, comment = "Toque para tentar acessar ou adicione o nome exato"))
                 }
             }
 
@@ -191,6 +247,7 @@ object SmbClientManager {
             }
         } catch (e: Exception) {
             Log.e(TAG, "Erro lendo diretório '$directoryPath' no share '$shareName'", e)
+            throw e
         } finally {
             try {
                 share?.close()
@@ -215,15 +272,7 @@ object SmbClientManager {
         val session = if (cached != null && cached.first.isConnected) {
             cached.second
         } else {
-            val conn = smbClient.connect(config.host, config.port)
-            val auth = if (config.isAnonymous || config.username.isBlank()) {
-                AuthenticationContext.anonymous()
-            } else {
-                AuthenticationContext(config.username, config.password.toCharArray(), config.domain)
-            }
-            val sess = conn.authenticate(auth)
-            activeSessions[key] = Pair(conn, sess)
-            sess
+            getOrCreateSessionSync(config)
         }
 
         val share = session.connectShare(shareName) as DiskShare

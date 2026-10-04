@@ -1,6 +1,6 @@
 {
-  "summary":  "Plano de implementação detalhado para correção completa do Google Cast (Chromecast), proxies de streaming HTTP com suporte a Range 206 e CORS para arquivos locais, SMB, IPTV e Torrents, status detalhado de diagnóstico na UI e atualização de versão para v1.6.1 com artefatos de APK sincronizados.",
-  "updatedAt":  "2026-10-04T14:57:53.688528879Z",
+  "summary":  "Plano de implementação para correção da detecção e listagem de pastas compartilhadas SMB no Windows, suporte a autenticação Guest/Usuário com fallback automático, adição de entrada direta de compartilhamento e melhorias de diagnóstico na rede local.",
+  "updatedAt":  "2026-10-04T15:07:34.974828248Z",
   "requestFeedback":  true,
   "userFacing":  true
 }
