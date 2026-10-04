@@ -19,8 +19,8 @@ android {
         val sha = System.getenv("GITHUB_SHA")?.take(7) ?: "local"
 
         // versionCode incrementado para permitir atualizações diretas
-        versionCode = if (runNumber != null) 210 + runNumber else 210
-        versionName = "1.6.2"
+        versionCode = if (runNumber != null) 211 + runNumber else 211
+        versionName = "1.6.3"
 
         buildConfigField("String", "GIT_SHA", "\"$sha\"")
         buildConfigField("int", "BUILD_NUMBER", "${runNumber ?: 0}")

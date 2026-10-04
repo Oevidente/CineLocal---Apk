@@ -358,7 +358,11 @@ class MainViewModel(
         viewModelScope.launch {
             repository.setSetting("tmdb_api_key", key)
             _tmdbApiKey.value = key
-            _uiEvents.emit(UiEvent.ShowToast("Chave TMDb salva com sucesso!"))
+            _uiEvents.emit(UiEvent.ShowToast("Chave TMDb salva! Buscando banners e sinopses…"))
+            val count = repository.enrichAllMediaWithTmdb()
+            if (count > 0) {
+                _uiEvents.emit(UiEvent.ShowToast("TMDb: $count item/itens enriquecidos com banners e informações!"))
+            }
         }
     }
 

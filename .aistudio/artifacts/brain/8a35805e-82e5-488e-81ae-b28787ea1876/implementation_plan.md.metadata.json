@@ -1,6 +1,6 @@
 {
-  "summary":  "Plano de implementação para correção da detecção e listagem de pastas compartilhadas SMB no Windows, suporte a autenticação Guest/Usuário com fallback automático, adição de entrada direta de compartilhamento e melhorias de diagnóstico na rede local.",
-  "updatedAt":  "2026-10-04T15:07:34.974828248Z",
+  "summary":  "Implementation plan to fix Google Cast streaming for local phone videos, magnet torrents, and IPTV channels, resolve OpenSubtitles download errors, restore TMDb metadata fetching for hero banners, and resolve all high-severity P1/P2 bugs from the QA report.",
+  "updatedAt":  "2026-10-04T16:06:15.827254167Z",
   "requestFeedback":  true,
   "userFacing":  true
 }

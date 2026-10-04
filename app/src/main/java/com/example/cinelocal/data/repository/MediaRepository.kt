@@ -16,6 +16,8 @@ import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.withContext
 import java.io.BufferedReader
+import com.example.cinelocal.data.tmdb.TmdbClient
+import java.io.File
 import java.io.InputStreamReader
 import java.net.HttpURLConnection
 import java.net.URL
@@ -641,6 +643,27 @@ class MediaRepository(
             }
             subtitleFileDao.deleteOrphanSubtitles()
         } catch (_: Exception) {}
+
+        // Auto-enriquecimento inicial via TMDb se houver mídias sem pôster/sinopse
+        try {
+            enrichAllMediaWithTmdb()
+        } catch (_: Exception) {}
+    }
+
+    suspend fun enrichAllMediaWithTmdb(): Int = withContext(Dispatchers.IO) {
+        val tmdbKey = settingDao.getSettingValue("tmdb_api_key")
+        val allMedia = mediaDao.getAllMediaList()
+        var updatedCount = 0
+        for (item in allMedia) {
+            if (item.posterPath.isNullOrBlank() || item.overview.isNullOrBlank() || item.overview.contains("importado", ignoreCase = true) || item.overview.contains("pasta", ignoreCase = true)) {
+                val enriched = TmdbClient.enrichMedia(item, tmdbKey)
+                if (enriched != item) {
+                    mediaDao.insertMedia(enriched)
+                    updatedCount++
+                }
+            }
+        }
+        updatedCount
     }
 
     /**
@@ -788,6 +811,12 @@ class MediaRepository(
                     try { java.io.File(p).delete() } catch (_: Exception) {}
                 }
                 subtitleFileDao.deleteOrphanSubtitles()
+            } catch (_: Exception) {}
+
+            // 5. Enriquecer metadados e banners com TMDb
+            try {
+                val enrichedCount = enrichAllMediaWithTmdb()
+                itemsAddedOrReconciled += enrichedCount
             } catch (_: Exception) {}
         }
 

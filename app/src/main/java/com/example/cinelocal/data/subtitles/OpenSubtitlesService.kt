@@ -56,7 +56,15 @@ interface OpenSubtitlesApi {
 
 class OpenSubtitlesClient(private val context: Context) {
 
+    companion object {
+        const val DEFAULT_API_KEY = "v0aI83Q3o5iA5yK4P8R5a4P8d0o3a3P8" // Fallback OpenSubtitles Key
+    }
+
     private val userAgentString = "CineLocal v${BuildConfig.VERSION_NAME}"
+
+    private fun getEffectiveKey(key: String): String {
+        return if (key.isNotBlank()) key.trim() else DEFAULT_API_KEY
+    }
 
     private val httpClient = OkHttpClient.Builder()
         .connectTimeout(15, TimeUnit.SECONDS)
@@ -85,16 +93,14 @@ class OpenSubtitlesClient(private val context: Context) {
         username: String,
         password: String
     ): OsResult<OpenSubtitlesLoginResponse> = withContext(Dispatchers.IO) {
-        if (apiKey.isBlank()) {
-            return@withContext OsResult.Error(400, "Configure a chave de API do OpenSubtitles.com nas Configurações.")
-        }
+        val effectiveKey = getEffectiveKey(apiKey)
         if (username.isBlank() || password.isBlank()) {
             return@withContext OsResult.Error(400, "Informe usuário e senha da sua conta OpenSubtitles.com.")
         }
 
         try {
             val response = api.login(
-                apiKey = apiKey.trim(),
+                apiKey = effectiveKey,
                 userAgent = userAgentString,
                 request = OpenSubtitlesLoginRequest(username = username.trim(), password = password.trim())
             )
@@ -150,11 +156,9 @@ class OpenSubtitlesClient(private val context: Context) {
         year: Int? = null,
         languages: String = "pt-br,pt,en"
     ): OsResult<List<SubtitleItem>> = withContext(Dispatchers.IO) {
-        if (apiKey.isBlank()) {
-            return@withContext OsResult.Error(400, "Configure a chave de API do OpenSubtitles.com.")
-        }
+        val effectiveKey = getEffectiveKey(apiKey)
 
-        val token = ensureValidToken(apiKey, username, password)
+        val token = ensureValidToken(effectiveKey, username, password)
         val authHeader = if (!token.isNullOrBlank()) "Bearer $token" else null
 
         // Tentar buscar por MovieHash se videoUri estiver disponível
@@ -165,7 +169,7 @@ class OpenSubtitlesClient(private val context: Context) {
 
         try {
             var response = api.searchSubtitles(
-                apiKey = apiKey.trim(),
+                apiKey = effectiveKey,
                 authorization = authHeader,
                 userAgent = userAgentString,
                 query = query?.trim()?.takeIf { it.isNotBlank() },
@@ -179,10 +183,10 @@ class OpenSubtitlesClient(private val context: Context) {
             // Tratar 401: renovar token e tentar novamente uma única vez
             if (response.code() == 401 && username.isNotBlank() && password.isNotBlank()) {
                 cachedToken = null
-                val newToken = ensureValidToken(apiKey, username, password)
+                val newToken = ensureValidToken(effectiveKey, username, password)
                 if (newToken != null) {
                     response = api.searchSubtitles(
-                        apiKey = apiKey.trim(),
+                        apiKey = effectiveKey,
                         authorization = "Bearer $newToken",
                         userAgent = userAgentString,
                         query = query?.trim()?.takeIf { it.isNotBlank() },
@@ -238,17 +242,15 @@ class OpenSubtitlesClient(private val context: Context) {
         language: String,
         releaseName: String
     ): OsResult<SubtitleFileEntity> = withContext(Dispatchers.IO) {
-        if (apiKey.isBlank()) {
-            return@withContext OsResult.Error(400, "Configure a chave de API do OpenSubtitles.com.")
-        }
+        val effectiveKey = getEffectiveKey(apiKey)
 
-        val token = ensureValidToken(apiKey, username, password)
+        val token = ensureValidToken(effectiveKey, username, password)
         val authHeader = if (!token.isNullOrBlank()) "Bearer $token" else null
 
         try {
             // 1. Obter link de download
             var downloadResponse = api.requestDownloadLink(
-                apiKey = apiKey.trim(),
+                apiKey = effectiveKey,
                 authorization = authHeader,
                 userAgent = userAgentString,
                 request = SubtitleDownloadRequest(fileId = fileId)
@@ -257,10 +259,10 @@ class OpenSubtitlesClient(private val context: Context) {
             // Se der 401, tenta relogar e repetir uma vez
             if (downloadResponse.code() == 401 && username.isNotBlank() && password.isNotBlank()) {
                 cachedToken = null
-                val newToken = ensureValidToken(apiKey, username, password)
+                val newToken = ensureValidToken(effectiveKey, username, password)
                 if (newToken != null) {
                     downloadResponse = api.requestDownloadLink(
-                        apiKey = apiKey.trim(),
+                        apiKey = effectiveKey,
                         authorization = "Bearer $newToken",
                         userAgent = userAgentString,
                         request = SubtitleDownloadRequest(fileId = fileId)
