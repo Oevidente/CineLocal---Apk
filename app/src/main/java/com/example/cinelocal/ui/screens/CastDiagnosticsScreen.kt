@@ -225,32 +225,34 @@ fun CastDiagnosticsScreen(
 
                     Row(
                         modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         OutlinedButton(
                             onClick = { runPingTest() },
                             enabled = !isPingTesting,
-                            shape = RoundedCornerShape(8.dp)
+                            shape = RoundedCornerShape(8.dp),
+                            modifier = Modifier.weight(1f)
                         ) {
                             if (isPingTesting) {
                                 CircularProgressIndicator(modifier = Modifier.size(14.dp), color = CineRed, strokeWidth = 2.dp)
-                                Spacer(modifier = Modifier.width(6.dp))
+                                Spacer(modifier = Modifier.width(4.dp))
                             } else {
                                 Icon(Icons.Default.NetworkCheck, contentDescription = null, tint = CineRed, modifier = Modifier.size(16.dp))
-                                Spacer(modifier = Modifier.width(6.dp))
+                                Spacer(modifier = Modifier.width(4.dp))
                             }
-                            Text("Testar Ping Local", fontSize = 12.sp, color = TextPrimary)
+                            Text("Ping", fontSize = 11.sp, color = TextPrimary)
                         }
 
                         Button(
-                            onClick = { castManager.proxyServer.start() },
+                            onClick = { castManager.restartCastServiceAndDiscovery() },
                             colors = ButtonDefaults.buttonColors(containerColor = CineRed),
-                            shape = RoundedCornerShape(8.dp)
+                            shape = RoundedCornerShape(8.dp),
+                            modifier = Modifier.weight(1.3f)
                         ) {
                             Icon(Icons.Default.Refresh, contentDescription = null, tint = Color.White, modifier = Modifier.size(16.dp))
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text("Reiniciar Servidor", fontSize = 12.sp, color = Color.White)
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("Reiniciar Cast", fontSize = 11.sp, color = Color.White)
                         }
                     }
 

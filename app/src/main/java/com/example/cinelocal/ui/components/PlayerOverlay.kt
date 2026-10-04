@@ -236,6 +236,23 @@ fun PlayerOverlay(
             }
         }
 
+        // Cast Incompatible Warning Dialog
+        if (castState.showIncompatibleDialog && !castState.compatibilityWarning.isNullOrBlank()) {
+            val currentContext = LocalContext.current
+            CastIncompatibleDialog(
+                warningMessage = castState.compatibilityWarning,
+                onPlayOnPhone = {
+                    onResumeLocally()
+                },
+                onTransmitAnyway = {
+                    com.example.cinelocal.cast.CastManager.getInstance(currentContext).proceedCastingIncompatible()
+                },
+                onDismiss = {
+                    com.example.cinelocal.cast.CastManager.getInstance(currentContext).dismissIncompatibleDialog()
+                }
+            )
+        }
+
         // Error message overlay
         uiState.errorMessage?.let { errorMsg ->
             val context = LocalContext.current

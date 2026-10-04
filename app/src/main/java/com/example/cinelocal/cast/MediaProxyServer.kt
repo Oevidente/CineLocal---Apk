@@ -55,22 +55,38 @@ class MediaProxyServer(private val context: Context) {
 
     // Circular log buffer for diagnostic screen
     val recentLogs = Collections.synchronizedList(mutableListOf<String>())
+    @Volatile
+    private var lastLogMsg: String? = null
+    @Volatile
+    private var lastLogCount: Int = 1
 
     fun log(msg: String) {
         Log.d("MediaProxyServer", msg)
         synchronized(recentLogs) {
-            if (recentLogs.size >= 120) recentLogs.removeAt(0)
             val timeStr = java.text.SimpleDateFormat("HH:mm:ss", java.util.Locale.getDefault()).format(java.util.Date())
-            recentLogs.add("[$timeStr] $msg")
+            if (recentLogs.isNotEmpty() && lastLogMsg == msg) {
+                lastLogCount++
+                val lastIdx = recentLogs.size - 1
+                recentLogs[lastIdx] = "[$timeStr] $msg (x$lastLogCount)"
+            } else {
+                lastLogMsg = msg
+                lastLogCount = 1
+                if (recentLogs.size >= 120) recentLogs.removeAt(0)
+                recentLogs.add("[$timeStr] $msg")
+            }
         }
     }
 
     fun clearLogs() {
         recentLogs.clear()
+        lastLogMsg = null
+        lastLogCount = 1
     }
 
     fun registerMedia(uri: Uri, mimeType: String): String {
         ensureStarted()
+        mediaSources.clear()
+        iptvSources.clear()
         val token = UUID.randomUUID().toString().replace("-", "").take(16)
         val size = calculateFileSize(uri)
         val uriStr = uri.toString()
@@ -95,6 +111,7 @@ class MediaProxyServer(private val context: Context) {
 
     fun registerSubtitle(vttContent: String): String {
         ensureStarted()
+        subtitleSources.clear()
         val token = UUID.randomUUID().toString().replace("-", "").take(16)
         subtitleSources[token] = vttContent
         val ip = getDeviceIpAddress()
@@ -105,6 +122,8 @@ class MediaProxyServer(private val context: Context) {
 
     fun registerIptvUrl(channelUrl: String): String {
         ensureStarted()
+        mediaSources.clear()
+        iptvSources.clear()
         val token = UUID.randomUUID().toString().replace("-", "").take(16)
         iptvSources[token] = channelUrl
         val ip = getDeviceIpAddress()
@@ -164,6 +183,7 @@ class MediaProxyServer(private val context: Context) {
 
     @Synchronized
     fun stop() {
+        if (!isRunning) return
         isRunning = false
         serverJob?.cancel()
         serverJob = null

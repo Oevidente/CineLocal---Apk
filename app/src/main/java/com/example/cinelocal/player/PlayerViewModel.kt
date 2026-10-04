@@ -346,6 +346,8 @@ class PlayerViewModel(
                     val autoSub = downloadedSubs.firstOrNull()
 
                     if (castManager.hasActiveSession()) {
+                        player.stop()
+                        player.clearMediaItems()
                         val subUrl = autoSub?.let { sub ->
                             try {
                                 val file = File(sub.filePath)
@@ -362,8 +364,7 @@ class PlayerViewModel(
                             startPositionMs = resumePos,
                             subtitleVttUrl = subUrl
                         ) { ok, error ->
-                            if (ok) player.pause()
-                            else _uiState.value = _uiState.value.copy(errorMessage = error ?: "Falha ao transmitir")
+                            if (!ok) _uiState.value = _uiState.value.copy(errorMessage = error ?: "Falha ao transmitir")
                         }
                     } else {
                         val mediaItemBuilder = MediaItem.Builder()
@@ -489,10 +490,11 @@ class PlayerViewModel(
                 currentSourceUri = resolved.uri
 
                 if (castManager.hasActiveSession()) {
+                    player.stop()
+                    player.clearMediaItems()
                     currentChannel?.let { ch ->
                         castManager.castIptvChannel(ch) { ok, error ->
-                            if (ok) player.pause()
-                            else _uiState.value = _uiState.value.copy(errorMessage = error ?: "Falha ao transmitir")
+                            if (!ok) _uiState.value = _uiState.value.copy(errorMessage = error ?: "Falha ao transmitir")
                         }
                     }
                 } else {

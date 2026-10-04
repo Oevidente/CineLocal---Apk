@@ -45,10 +45,9 @@ class CastServerService : Service() {
         }
 
         fun stop(context: Context) {
-            val intent = Intent(context, CastServerService::class.java).apply {
-                action = ACTION_STOP
-            }
-            context.startService(intent)
+            try {
+                context.stopService(Intent(context, CastServerService::class.java))
+            } catch (_: Exception) {}
         }
     }
 
