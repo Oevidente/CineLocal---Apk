@@ -36,10 +36,11 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FolderOpen
 import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.Link
+import androidx.compose.material.icons.filled.LiveTv
 import androidx.compose.material.icons.filled.Movie
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
@@ -115,8 +116,8 @@ enum class AppTab(val label: String, val icon: ImageVector) {
     HOME("Início", Icons.Default.Home),
     MOVIES("Filmes", Icons.Default.Movie),
     SERIES("Séries", Icons.Default.Tv),
-    TORRENTS("Torrents", Icons.Default.Download),
-    CHANNELS("Ao Vivo", Icons.Default.Tv),
+    TORRENTS("Torrents", Icons.Default.Link),
+    CHANNELS("Ao Vivo", Icons.Default.LiveTv),
     FAVORITES("Favoritos", Icons.Default.Favorite),
     SETTINGS("Config", Icons.Default.Settings)
 }
@@ -354,6 +355,35 @@ fun CineLocalApp(
         }
     }
 
+    val startupPermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestMultiplePermissions()
+    ) { permissionsResult ->
+        val castPermissionGranted = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+            permissionsResult[android.Manifest.permission.NEARBY_WIFI_DEVICES] == true
+        } else {
+            permissionsResult[android.Manifest.permission.ACCESS_FINE_LOCATION] == true ||
+            permissionsResult[android.Manifest.permission.ACCESS_COARSE_LOCATION] == true
+        }
+        if (castPermissionGranted) {
+            playerViewModel.castManager.startDiscovery()
+        }
+    }
+
+    LaunchedEffect(Unit) {
+        val permissions = mutableListOf<String>()
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+            permissions.add(android.Manifest.permission.NEARBY_WIFI_DEVICES)
+            permissions.add(android.Manifest.permission.POST_NOTIFICATIONS)
+            permissions.add(android.Manifest.permission.READ_MEDIA_VIDEO)
+            permissions.add(android.Manifest.permission.READ_MEDIA_AUDIO)
+        } else {
+            permissions.add(android.Manifest.permission.ACCESS_FINE_LOCATION)
+            permissions.add(android.Manifest.permission.ACCESS_COARSE_LOCATION)
+            permissions.add(android.Manifest.permission.READ_EXTERNAL_STORAGE)
+        }
+        startupPermissionLauncher.launch(permissions.toTypedArray())
+    }
+
     // View Model Observables
     val allMedia by mainViewModel.allMedia.collectAsStateWithLifecycle()
     val movies by mainViewModel.movies.collectAsStateWithLifecycle()
@@ -488,34 +518,17 @@ fun CineLocalApp(
                                         )
                                     }
 
-                                    IconButton(
-                                        onClick = {
-                                            filesPickerLauncher.launch(
-                                                arrayOf(
-                                                    "video/*",
-                                                    "application/x-matroska",
-                                                    "application/octet-stream"
-                                                )
+                                    if (activeTab != AppTab.CHANNELS) {
+                                        IconButton(
+                                            onClick = { showAddDialog = true },
+                                            modifier = Modifier.testTag("add_media_top_button")
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Default.Add,
+                                                contentDescription = "Adicionar Mídia",
+                                                tint = Color.White
                                             )
-                                        },
-                                        modifier = Modifier.testTag("quick_video_picker_button")
-                                    ) {
-                                        Icon(
-                                            imageVector = Icons.Default.VideoFile,
-                                            contentDescription = "Selecionar Vídeo(s)",
-                                            tint = CineRed
-                                        )
-                                    }
-
-                                    IconButton(
-                                        onClick = { showAddDialog = true },
-                                        modifier = Modifier.testTag("add_media_top_button")
-                                    ) {
-                                        Icon(
-                                            imageVector = Icons.Default.Add,
-                                            contentDescription = "Adicionar Mídia",
-                                            tint = Color.White
-                                        )
+                                        }
                                     }
 
                                     IconButton(

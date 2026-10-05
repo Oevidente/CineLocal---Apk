@@ -153,8 +153,6 @@ fun SettingsScreen(
                 icon = Icons.Default.Computer,
                 title = "Armazenamento no Computador (PC / SMB)",
                 subtitle = "Conecte seu PC para explorar e assistir pastas pela rede Wi-Fi",
-                badge = "NOVO",
-                badgeColor = Color(0xFF38BDF8),
                 onClick = onOpenPcNetwork,
                 testTag = "settings_pc_network_item"
             )
