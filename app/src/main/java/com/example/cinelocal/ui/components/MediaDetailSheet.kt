@@ -93,7 +93,7 @@ fun MediaDetailSheet(
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = sheetState,
-        containerColor = DarkBackground,
+        containerColor = Color(0xF20F0F0F),
         contentColor = TextPrimary,
         modifier = modifier.testTag("media_detail_sheet")
     ) {
@@ -245,9 +245,14 @@ fun MediaDetailSheet(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
-                        OutlinedButton(
+                        Button(
                             onClick = onFavoriteToggle,
                             modifier = Modifier.weight(1f),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = Color(0x26FFFFFF),
+                                contentColor = TextPrimary
+                            ),
+                            border = androidx.compose.foundation.BorderStroke(1.dp, Color(0x22FFFFFF)),
                             shape = RoundedCornerShape(8.dp)
                         ) {
                             Icon(
@@ -262,11 +267,15 @@ fun MediaDetailSheet(
                             )
                         }
 
-                        OutlinedButton(
+                        Button(
                             onClick = onDeleteClick,
                             modifier = Modifier.weight(1f),
                             shape = RoundedCornerShape(8.dp),
-                            colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFFFF5252))
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = Color(0x1AFF5252),
+                                contentColor = Color(0xFFFF5252)
+                            ),
+                            border = androidx.compose.foundation.BorderStroke(1.dp, Color(0x2BFF5252))
                         ) {
                             Icon(imageVector = Icons.Default.Delete, contentDescription = null)
                             Spacer(modifier = Modifier.width(6.dp))
@@ -276,13 +285,18 @@ fun MediaDetailSheet(
 
                     if (media.kind == MediaKind.TORRENT || media.streamUrl?.startsWith("magnet:", ignoreCase = true) == true) {
                         Spacer(modifier = Modifier.height(10.dp))
-                        OutlinedButton(
+                        Button(
                             onClick = {
                                 val magnet = media.streamUrl ?: ""
                                 com.example.cinelocal.data.torrent.TorrentLaunchHelper.openInExternalTorrentApp(context, magnet)
                             },
                             modifier = Modifier.fillMaxWidth(),
-                            shape = RoundedCornerShape(8.dp)
+                            shape = RoundedCornerShape(8.dp),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = Color(0x1A38BDF8),
+                                contentColor = Color(0xFF38BDF8)
+                            ),
+                            border = androidx.compose.foundation.BorderStroke(1.dp, Color(0x2B38BDF8))
                         ) {
                             Icon(
                                 imageVector = Icons.Default.Download,

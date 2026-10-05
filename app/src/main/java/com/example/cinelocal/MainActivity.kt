@@ -33,6 +33,9 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
@@ -576,44 +579,6 @@ fun CineLocalApp(
                     }
                 }
             },
-            bottomBar = {
-                NavigationBar(
-                    containerColor = DarkSurface,
-                    modifier = Modifier.testTag("bottom_nav_bar")
-                ) {
-                    AppTab.entries.forEach { tab ->
-                        NavigationBarItem(
-                            selected = activeTab == tab,
-                            onClick = { activeTab = tab },
-                            icon = {
-                                Icon(
-                                    imageVector = tab.icon,
-                                    contentDescription = tab.label
-                                )
-                            },
-                            label = {
-                                Text(
-                                    text = tab.label,
-                                    fontSize = 8.5.sp,
-                                    letterSpacing = (-0.3).sp,
-                                    maxLines = 1,
-                                    softWrap = false,
-                                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
-                                    fontWeight = if (activeTab == tab) FontWeight.Bold else FontWeight.Normal
-                                )
-                            },
-                            alwaysShowLabel = true,
-                            colors = NavigationBarItemDefaults.colors(
-                                selectedIconColor = CineRed,
-                                selectedTextColor = CineRed,
-                                unselectedIconColor = TextSecondary,
-                                unselectedTextColor = TextSecondary,
-                                indicatorColor = Color.Transparent
-                            )
-                        )
-                    }
-                }
-            },
             floatingActionButton = {
                 if (activeTab == AppTab.HOME || activeTab == AppTab.MOVIES || activeTab == AppTab.SERIES || activeTab == AppTab.TORRENTS) {
                     FloatingActionButton(
@@ -621,7 +586,9 @@ fun CineLocalApp(
                         containerColor = CineRed,
                         contentColor = Color.White,
                         shape = RoundedCornerShape(16.dp),
-                        modifier = Modifier.testTag("fab_add_media")
+                        modifier = Modifier
+                            .padding(bottom = 76.dp)
+                            .testTag("fab_add_media")
                     ) {
                         Icon(imageVector = Icons.Default.Add, contentDescription = "Adicionar")
                     }
@@ -631,7 +598,7 @@ fun CineLocalApp(
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(paddingValues)
+                    .padding(top = paddingValues.calculateTopPadding())
             ) {
                 // Loading Spinner
                 if (isLoading) {
@@ -804,6 +771,62 @@ fun CineLocalApp(
                             onOpenPcNetwork = { mainViewModel.openSmbExplorer() },
                             onRescanLibrary = { mainViewModel.rescanAll() }
                         )
+                    }
+                }
+            }
+        }
+
+        // Floating Glass Bottom Navigation Bar
+        Box(
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .padding(horizontal = 14.dp, vertical = 14.dp)
+                .navigationBarsPadding()
+        ) {
+            Surface(
+                color = Color(0xDC0C0C0C), // 86% opaque premium dark glass
+                shape = RoundedCornerShape(24.dp),
+                border = BorderStroke(1.dp, Color(0x22FFFFFF)),
+                tonalElevation = 8.dp,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(64.dp)
+                    .testTag("bottom_nav_bar")
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxSize().padding(horizontal = 4.dp),
+                    horizontalArrangement = Arrangement.SpaceEvenly,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    AppTab.entries.forEach { tab ->
+                        val isSelected = activeTab == tab
+                        Column(
+                            modifier = Modifier
+                                .weight(1f)
+                                .clickable(
+                                    interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
+                                    indication = null,
+                                    onClick = { activeTab = tab }
+                                ),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.Center
+                        ) {
+                            Icon(
+                                imageVector = tab.icon,
+                                contentDescription = tab.label,
+                                tint = if (isSelected) CineRed else TextSecondary,
+                                modifier = Modifier.size(20.dp)
+                            )
+                            Spacer(modifier = Modifier.height(3.dp))
+                            Text(
+                                text = tab.label,
+                                fontSize = 8.5.sp,
+                                color = if (isSelected) CineRed else TextSecondary,
+                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                                maxLines = 1,
+                                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                            )
+                        }
                     }
                 }
             }

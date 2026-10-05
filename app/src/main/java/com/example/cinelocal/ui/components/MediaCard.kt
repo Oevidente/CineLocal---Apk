@@ -61,8 +61,9 @@ fun MediaCard(
             .clickable(onClick = onClick)
             .testTag("media_card_${media.id}"),
         shape = RoundedCornerShape(10.dp),
-        colors = CardDefaults.cardColors(containerColor = DarkSurface),
-        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
+        colors = CardDefaults.cardColors(containerColor = Color(0xB31E1E1E)),
+        border = androidx.compose.foundation.BorderStroke(1.dp, Color(0x1AFFFFFF)),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
     ) {
         Column {
             // Poster Box

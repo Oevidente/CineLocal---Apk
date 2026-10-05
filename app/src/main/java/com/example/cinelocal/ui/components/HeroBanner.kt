@@ -212,12 +212,14 @@ fun HeroBanner(
                     )
                 }
 
-                OutlinedButton(
+                Button(
                     onClick = onDetailsClick,
-                    colors = ButtonDefaults.outlinedButtonColors(
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = Color(0x26FFFFFF),
                         contentColor = TextPrimary
                     ),
                     shape = RoundedCornerShape(8.dp),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, Color(0x22FFFFFF)),
                     modifier = Modifier
                         .weight(1f)
                         .height(44.dp)

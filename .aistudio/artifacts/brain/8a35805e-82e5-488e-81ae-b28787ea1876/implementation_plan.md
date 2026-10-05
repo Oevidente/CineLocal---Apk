@@ -1,105 +1,88 @@
-# Transmissão Cast Continuada em Segundo Plano & Modo Picture-in-Picture (PiP)
+# CineLocal Premium Glassmorphism & Netflix Upgrade
 
-Plano de execução para garantir que a transmissão para o Google Cast continue reproduzindo sem pausas quando o aplicativo for minimizado ou o usuário alternar para outros apps, mantendo um serviço em primeiro plano (*Foreground Service*) com controles de notificação, além da implementação do modo Picture-in-Picture (PiP) para o player nativo do smartphone.
+Melhoria visual completa do CineLocal para alcançar um design extremamente moderno e premium próximo ao da Netflix, aplicando o efeito de glassmorphism (vidro fosco semi-transparente) na barra de navegação flutuante, cartões de mídia, botões secundários e folhas de detalhes.
 
----
-
-## User Review & Decisões Confirmadas
+## User Review & Critical Decisions
 
 > [!IMPORTANT]
-> Decisões confirmadas pelo usuário na etapa de alinhamento:
-> - **Transmissão Cast em Segundo Plano**: Manter o `CastServerService` e o `MediaProxyServer` rodando como *Foreground Service* dedicado (`mediaPlayback`). Garantir que minimização e troca de app **NÃO** causem pause nem desconexão no Chromecast.
-> - **Notificação de Controle Cast**: Notificação persistente no painel do Android com botões de ação rápidos (*Play/Pause*, *Sair do Cast*).
-> - **Modo Picture-in-Picture (PiP)**: Ativação automática do modo PiP ao minimizar o aplicativo enquanto um vídeo local estiver rodando no celular, além de botão manual de acionamento de PiP nos controles do player.
+> Com base nas suas respostas às perguntas de esclarecimento, adotaremos as seguintes diretrizes de design de alta fidelidade:
+
+-   **Nível do Glassmorphism**: Transparência elegante com fundo escuro suave combinada a bordas ultrafinas de vidro fosco (`Color(0x22FFFFFF)`) para garantir contraste e legibilidade impecáveis.
+-   **Estilo da Barra de Navegação**: Barra flutuante em formato de cápsula com cantos arredondados e fundo semi-transparente, posicionada na parte inferior central da tela, permitindo que o conteúdo role por trás com efeito translúcido (overlap).
+-   **Elementos com Efeito**: Cards de mídia (`MediaCard`), botões secundários (como "Detalhes" no HeroBanner e botões de ação na sheet), e a folha de detalhes do filme/série (`MediaDetailSheet`).
 
 ---
 
 ## 1. Overview & Core Concept
 
-- **Problema 1 (Pausa do Cast ao Minimizar)**: Atualmente, quando o app vai para o segundo plano, os métodos do ciclo de vida da `Activity` ou destruição parcial do player local acionavam pausas indeferidas ou o sistema Android matava o socket do servidor HTTP local (`MediaProxyServer`).
-- **Problema 2 (Navegação Multitarefa no Smartphone)**: Usuários que assistem no próprio celular precisam sair do app para responder mensagens ou navegar sem interromper o vídeo.
-- **Soluções**:
-  1. **Ajuste de Ciclo de Vida do Cast & Foreground Service**: Atualizar `CastServerService` para rodar como Foreground Service com tipo `mediaPlayback` e notificação de mídia rica. Isolar o estado do Cast no `CastManager` para ignorar `onStop` da Activity quando a sessão de Cast estiver ativa.
-  2. **Android Picture-in-Picture (PiP)**: Declarar `android:supportsPictureInPicture="true"` no `AndroidManifest.xml`, configurar `PictureInPictureParams` no `MainActivity`, disparar `enterPictureInPictureMode` em `onUserLeaveHint()` e ocultar overlays de controle durante o modo PiP.
+-   **O que faz**: Atualiza e eleva todo o visual do aplicativo CineLocal, transformando-o de uma interface com cinzas planos para uma estética luxuosa escura ("luxury dark") inspirada na Netflix.
+-   **Principal Valor**: Aumentar o prazer visual ao navegar pelas coleções de filmes e séries locais, criando profundidade tridimensional com efeitos de sobreposição e transparência reflexiva.
 
 ---
 
 ## 2. User Experience & Visual Design
 
-### Fluxo do Usuário (Cast em Segundo Plano)
-1. **Início do Cast**: O usuário inicia a transmissão para o Chromecast.
-2. **Minimização**: O usuário minimiza o app ou troca de tela/aplicativo.
-3. **Comportamento Esperado**: A TV continua reproduzindo o vídeo sem qualquer interrupção ou travamento. Uma notificação fixa do CineLocal aparece na barra de status com título da mídia, nome do dispositivo Cast e controles (Play, Pause, Desconectar).
+### Fluxo de Navegação e Sobreposição
 
-```
-┌─────────────────────────────────────────────────────────────┐
-│ 📺 CineLocal • Transmitindo em Sala de Estar                │
-│ Stranger Things - S01E01                                    │
-│ [ ⏸ Pausar ]             [ ❌ Desconectar ]                  │
-└─────────────────────────────────────────────────────────────┘
-```
+O usuário navega através das abas do app mantendo a barra de navegação flutuante fixa na base da tela. Ao rolar as fileiras de mídias, as imagens e títulos passam suavemente sob a barra de navegação, criando uma rica sensação de profundidade tridimensional.
 
-### Fluxo do Usuário (Modo PiP)
-1. **Início da Reprodução Local**: O usuário assiste a um vídeo diretamente na tela do celular.
-2. **Gesto de Início/Home**: O usuário retorna à tela inicial ou troca de app.
-3. **Comportamento Esperado**: A tela do player se reduz suavemente a um quadro flutuante (PiP) no canto da tela, mantendo a proporção do vídeo e ocultando botões de controle para melhor visualização.
+### Identidade Visual & Temas
+
+-   **Paleta de Cores**:
+    -   `DarkBackground`: `#0D0D0D` (Preto puro Netflix para contraste infinito em telas OLED).
+    -   `GlassContainer`: `rgba(26, 26, 26, 0.75)` (Cinza grafite semi-transparente).
+    -   `GlassBorder`: `rgba(255, 255, 255, 0.12)` (Borda reflexiva fina para delimitar os cards e barras).
+    -   `CineRed`: `#E50914` (Vermelho icônico Netflix mantido como cor de destaque e seleção).
+-   **Efeitos de Transparência e Blur**:
+    -   Nas versões do Android compatíveis (Android 12+), utilizaremos a renderização de efeito de desfoque de fundo nativo para um autêntico vidro fosco.
+    -   Nas versões anteriores do Android, usaremos uma composição especial de gradientes escuros refinados e opacidade ajustada, garantindo elegância e excelente legibilidade em qualquer dispositivo.
 
 ---
 
-## 3. Principais Decisões Técnicas e Trade-Offs
+## 3. Key Product Decisions & Trade-Offs
 
-- **Isolamento de Ciclo de Vida para Cast**:
-  - *Abordagem*: No `MainActivity.kt` e `PlayerViewModel.kt`, impedir chamadas automáticas de `exoPlayer.pause()` em `onStop()` ou `onDispose()` caso `castState.isConnected == true`.
-  - *Por que*: Durante o Cast, a mídia é renderizada pela TV e servida pelo `MediaProxyServer`. A Activity do celular é apenas o controle remoto.
-- **Serviço de Segundo Plano Garantido (`CastServerService`)**:
-  - *Abordagem*: Registrar o serviço no manifesto com `android:foregroundServiceType="mediaPlayback"` e utilizar `startForeground()` imediatamente ao iniciar qualquer stream local para Cast.
-- **Android PiP API**:
-  - *Abordagem*: Utilizar `setPictureInPictureParams` com `Rational(width, height)` do vídeo para proporção adequada no quadro flutuante.
+-   **Decisão 1: Barra de Navegação Flutuante Overlaid**
+    -   *Abordagem Escolhida*: Remover a barra de navegação do slot fixo do `Scaffold` e renderizá-la dentro de um contêiner `Box` fixado no fundo central.
+    -   *Vantagem*: Garante que o conteúdo role por baixo dela de forma translúcida.
+    -   *Impacto*: Será necessário adicionar um espaçador inferior (`Spacer` de 90.dp) no final de todas as telas roláveis para que nenhuma informação ou card importante fique inacessível sob a barra.
+-   **Decisão 2: Estilização do MediaCard**
+    -   *Abordagem Escolhida*: Cards de mídias terão cantos arredondados mais suaves, um fundo translúcido escuro com borda reflexiva branca sutil de 1.dp e um leve gradiente interno.
 
 ---
 
 ## 4. Technical Architecture & Data Strategy
 
-### Diagrama do Fluxo de Segundo Plano & PiP
+### Componentes & Hierarquia Visual
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│ Android System (Lifecycle & Background)                     │
-└──────────────┬──────────────────────────────┬───────────────┘
-               │ (App minimizado)             │ (Local Video)
-               ▼                              ▼
-┌─────────────────────────────┐  ┌────────────────────────────┐
-│ CastServerService           │  │ MainActivity / ExoPlayer   │
-│ - Foreground Service        │  │ - onUserLeaveHint()        │
-│ - MediaProxyServer Active   │  │ - enterPictureInPictureMode│
-│ - Notificação de Controles  │  │ - Esconde Overlays na UI   │
-└──────────────┬──────────────┘  └────────────────────────────┘
-               │
-               ▼
-┌─────────────────────────────┐
-│ Chromecast Device (TV)      │
-│ (Reprodução contínua 100%)  │
-└─────────────────────────────┘
+┌─────────────────────────────────────────────────────────┐
+│                     CineLocal App                       │
+├─────────────────────────────────────────────────────────┤
+│ [Top Bar] C CINELOCAL                [Cast] [Search] [+] │
+├─────────────────────────────────────────────────────────┤
+│ [Scrollable Content: HomeScreen / MoviesScreen / etc.]   │
+│   │                                                     │
+│   ├─► [Hero Banner] (Featured Movie & Glass Buttons)    │
+│   │                                                     │
+│   ├─► [Media Row] (Horizontal scroll of Glass Cards)    │
+│   │                                                     │
+│   └─► [Spacer] (Ensures content scrolls above dock)     │
+│                                                         │
+├─────────────────────────────────────────────────────────┤
+│ [Floating Glass Navigation Dock]                        │
+│   [ Início ] [ Filmes ] [ Séries ] ... [ Config ]      │
+└─────────────────────────────────────────────────────────┘
 ```
 
-### Modificações nos Arquivos
+### Componentes a serem Refatorados
 
-1. **`AndroidManifest.xml`**:
-   - Adicionar `android:supportsPictureInPicture="true"` e `android:configChanges="screenSize|smallestScreenSize|screenLayout|orientation"` na `MainActivity`.
-   - Garantir declaração da permissão `FOREGROUND_SERVICE_MEDIA_PLAYBACK`.
-
-2. **`CastServerService.kt`**:
-   - Adicionar ações de Intent na notificação (`ACTION_PLAY_PAUSE`, `ACTION_STOP_CAST`).
-   - Manter notificação atualizada com estado de reprodução e metadados.
-
-3. **`MainActivity.kt`**:
-   - Implementar `onUserLeaveHint()` para entrar em PiP se um vídeo local estiver ativo (`!castState.isConnected && isPlayerActive && isPlaying`).
-   - Tratar `onPictureInPictureModeChanged()` para passar o estado `isInPictureInPictureMode` para o `PlayerScreen`.
-   - Garantir que `onStop()` não interrompa a sessão do Cast.
-
-4. **`PlayerOverlay.kt` / `PlayerScreen.kt`**:
-   - Adicionar botão de PiP na barra de controles do player.
-   - Ocultar botões, barra de progresso e gradientes de fundo no modo PiP.
-
-5. **Incremento de Versão**:
-   - Atualizar `versionCode` para `215` e `versionName` para `1.6.7` em `build.gradle.kts`, `package.json` e `index.html`.
+1.  **`MainActivity.kt`**:
+    -   Substituir a `NavigationBar` padrão do Scaffold por um dock de navegação flutuante customizado com efeito de vidro (semi-transparente, cantos arredondados de 24.dp, bordas sutis e fundo flutuante sobreposto).
+    -   Ajustar os paddings das telas para que o conteúdo preencha toda a tela.
+2.  **`HeroBanner.kt`**:
+    -   Atualizar o botão secundário "Detalhes" para um visual de vidro semi-transparente refinado com fundo `Color(0x33FFFFFF)` e borda suave.
+3.  **`MediaCard.kt`**:
+    -   Aplicar borda reflexiva suave e fundo glassmorphism translúcido ao card de mídia.
+4.  **`MediaDetailSheet.kt`**:
+    -   Atualizar os botões secundários da folha de detalhes ("Favoritar", "Remover", "Baixar") para herdar o visual de vidro fosco de alta fidelidade.
+    -   Modificar o fundo geral da folha para um visual escuro semi-transparente premium.

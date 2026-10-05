@@ -109,6 +109,11 @@ class PlayerViewModel(
     private var localPositionBeforeCast: Long = 0L
     private var lastRemotePositionMs: Long = 0L
 
+    private val channelFallbacks = mapOf(
+        "https://redeminas-live.fabricahost.com.br/redeminas/index.m3u8" to "https://v4-slbps-sambavideos.akamaized.net/live/3282%2C8114%2Cec4b5a296d97fa99bf990662f5b4f8e1%3Bbase64np%3BMc8VDxqNjXKCAf8%21/amlst%3AMc_tFgfGiHOdQXPB/chunklist_.m3u8",
+        "https://cdn.jmvstream.com/w/LVW-8155/ngrp:LVW8155_41E1ciuCvO_all/playlist.m3u8" to "https://v4-slbps-sambavideos.akamaized.net/live/3282%2C8114%2Cec4b5a296d97fa99bf990662f5b4f8e1%3Bbase64np%3BMc8VDxqNjXKCAf8%21/amlst%3AMc_tFgfGiHOdQXPB/chunklist_.m3u8"
+    )
+
     init {
         castManager.init()
         castManager.onRequestResumeLocally = { ep, ch, title, pos ->
@@ -241,6 +246,24 @@ class PlayerViewModel(
                     }
 
                     override fun onPlayerError(error: PlaybackException) {
+                        val failedUrl = currentSourceUri?.toString()
+                        if (failedUrl != null && channelFallbacks.containsKey(failedUrl)) {
+                            val backupUrl = channelFallbacks[failedUrl]
+                            if (backupUrl != null) {
+                                android.util.Log.i("Player", "Fallback automatico para canal: $backupUrl")
+                                val mediaItem = MediaItem.Builder()
+                                    .setUri(Uri.parse(backupUrl))
+                                    .setMimeType(MimeTypes.APPLICATION_M3U8)
+                                    .build()
+                                currentSourceUri = Uri.parse(backupUrl)
+                                player.stop()
+                                player.setMediaItem(mediaItem)
+                                player.prepare()
+                                player.play()
+                                return
+                            }
+                        }
+
                         val userMessage = when (error.errorCode) {
                             PlaybackException.ERROR_CODE_IO_FILE_NOT_FOUND ->
                                 "Arquivo não encontrado. Ele foi movido ou o pendrive/PC está desconectado?"

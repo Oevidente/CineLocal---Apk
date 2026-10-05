@@ -617,7 +617,7 @@ class MediaRepository(
                     name = "Rede Minas",
                     group = "Abertos Brasil",
                     logo = "https://raw.githubusercontent.com/iptv-org/epg/master/logos/RedeMinas.png",
-                    url = "https://redeminas-live.fabricahost.com.br/redeminas/index.m3u8"
+                    url = "https://v4-slbps-sambavideos.akamaized.net/live/3282%2C8114%2Cec4b5a296d97fa99bf990662f5b4f8e1%3Bbase64np%3BMc8VDxqNjXKCAf8%21/amlst%3AMc_tFgfGiHOdQXPB/chunklist_.m3u8"
                 ),
                 IptvChannelEntity(
                     name = "Euronews Português",
