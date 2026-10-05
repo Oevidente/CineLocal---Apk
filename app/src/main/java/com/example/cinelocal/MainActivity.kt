@@ -824,6 +824,7 @@ fun CineLocalApp(
                                 color = if (isSelected) CineRed else TextSecondary,
                                 fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
                                 maxLines = 1,
+                                softWrap = false,
                                 overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
                             )
                         }
