@@ -133,6 +133,7 @@ fun PlayerOverlay(
     onDismissCastError: () -> Unit = {},
     onOpenDiagnostics: () -> Unit = {},
     onEnterPipClick: () -> Unit = {},
+    onControlsVisibilityChange: (Boolean) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     if (isInPipMode) {
@@ -147,6 +148,10 @@ fun PlayerOverlay(
 
     var isUserSeeking by remember { mutableStateOf(false) }
     var sliderValue by remember { mutableFloatStateOf(0f) }
+
+    LaunchedEffect(areControlsVisible) {
+        onControlsVisibilityChange(areControlsVisible)
+    }
 
     // Auto-hide controls after 4 seconds of inactivity if playing
     LaunchedEffect(areControlsVisible, uiState.isPlaying, isUserSeeking) {

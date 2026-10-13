@@ -21,6 +21,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.WindowInsetsControllerCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.ui.PlayerView
@@ -46,6 +48,8 @@ fun PlayerScreen(
     val downloadedSubtitles by playerViewModel.downloadedSubtitles.collectAsStateWithLifecycle()
 
     var showCastDialog by remember { mutableStateOf(false) }
+    var areControlsVisible by remember { mutableStateOf(true) }
+    val window = (context as? Activity)?.window
 
     val castPermissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestMultiplePermissions()
@@ -75,11 +79,27 @@ fun PlayerScreen(
 
     // Keep screen on during playback
     DisposableEffect(Unit) {
-        val window = (context as? Activity)?.window
         window?.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
 
         onDispose {
             window?.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+            window?.let {
+                WindowInsetsControllerCompat(it, it.decorView)
+                    .show(WindowInsetsCompat.Type.statusBars())
+            }
+        }
+    }
+
+    LaunchedEffect(areControlsVisible, isInPipMode, window) {
+        window?.let {
+            val insetsController = WindowInsetsControllerCompat(it, it.decorView)
+            insetsController.systemBarsBehavior =
+                WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+            if (areControlsVisible || isInPipMode) {
+                insetsController.show(WindowInsetsCompat.Type.statusBars())
+            } else {
+                insetsController.hide(WindowInsetsCompat.Type.statusBars())
+            }
         }
     }
 
@@ -146,6 +166,7 @@ fun PlayerScreen(
             onDismissCastError = { playerViewModel.dismissCastError() },
             isInPipMode = isInPipMode,
             onEnterPipClick = onEnterPipClick,
+            onControlsVisibilityChange = { areControlsVisible = it },
             modifier = Modifier.fillMaxSize()
         )
 
