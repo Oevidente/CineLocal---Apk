@@ -22,7 +22,7 @@ android {
 
         // versionCode incrementado para permitir atualizações diretas
         versionCode = if (runNumber != null) 250 + runNumber else 250
-        versionName = "1.7.6"
+        versionName = "1.7.7"
 
         buildConfigField("String", "GIT_SHA", "\"$sha\"")
         buildConfigField("int", "BUILD_NUMBER", "${runNumber ?: 0}")
@@ -106,6 +106,7 @@ dependencies {
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.ui)
     implementation(libs.androidx.ui.graphics)
+    implementation(libs.androidx.graphics.path)
     implementation(libs.androidx.ui.tooling.preview)
     implementation(libs.androidx.material3)
     implementation(libs.androidx.material.icons.extended)
@@ -143,6 +144,11 @@ dependencies {
 
     // Real Torrent P2P Engine
     implementation(libs.torrentstream.android)
+    implementation(libs.libtorrent4j)
+    implementation(libs.libtorrent4j.android.arm)
+    implementation(libs.libtorrent4j.android.arm64)
+    implementation(libs.libtorrent4j.android.x86)
+    implementation(libs.libtorrent4j.android.x8664)
 
     debugImplementation(libs.androidx.ui.tooling)
     debugImplementation(libs.androidx.ui.test.manifest)
