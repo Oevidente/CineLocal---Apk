@@ -44,6 +44,7 @@ import androidx.compose.material.icons.filled.FolderOpen
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Link
 import androidx.compose.material.icons.filled.LiveTv
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Movie
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
@@ -51,13 +52,11 @@ import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Tv
 import androidx.compose.material.icons.filled.VideoFile
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.FloatingActionButton
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.NavigationBar
-import androidx.compose.material3.NavigationBarItem
-import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
@@ -276,6 +275,7 @@ fun CineLocalApp(
     var isPlayerActive by remember { mutableStateOf(false) }
     var showDiagnosticsScreen by remember { mutableStateOf(false) }
     var isSearchExpanded by remember { mutableStateOf(false) }
+    var showToolsMenu by remember { mutableStateOf(false) }
 
     // Dialogs state
     var showAddDialog by remember { mutableStateOf(false) }
@@ -460,7 +460,8 @@ fun CineLocalApp(
             topBar = {
                 // Top App Bar
                 Surface(
-                    color = DarkBackground,
+                    color = DarkBackground.copy(alpha = 0.97f),
+                    border = BorderStroke(1.dp, Color.White.copy(alpha = 0.06f)),
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Column(
@@ -492,14 +493,22 @@ fun CineLocalApp(
                                             )
                                         }
                                     }
-                                    Text(
-                                        text = "CINELOCAL",
-                                        style = MaterialTheme.typography.titleLarge,
-                                        fontWeight = FontWeight.Black,
-                                        color = CineRed,
-                                        letterSpacing = 1.5.sp,
-                                        fontSize = 20.sp
-                                    )
+                                    Row {
+                                        Text(
+                                            text = "Cine",
+                                            style = MaterialTheme.typography.titleLarge,
+                                            fontWeight = FontWeight.Black,
+                                            color = CineRed,
+                                            fontSize = 20.sp
+                                        )
+                                        Text(
+                                            text = "Local",
+                                            style = MaterialTheme.typography.titleLarge,
+                                            fontWeight = FontWeight.Black,
+                                            color = Color.White,
+                                            fontSize = 20.sp
+                                        )
+                                    }
                                 }
 
                                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -524,7 +533,10 @@ fun CineLocalApp(
                                     if (activeTab != AppTab.CHANNELS) {
                                         IconButton(
                                             onClick = { showAddDialog = true },
-                                            modifier = Modifier.testTag("add_media_top_button")
+                                            modifier = Modifier
+                                                .size(36.dp)
+                                                .background(CineRed, RoundedCornerShape(8.dp))
+                                                .testTag("add_media_top_button")
                                         ) {
                                             Icon(
                                                 imageVector = Icons.Default.Add,
@@ -534,15 +546,54 @@ fun CineLocalApp(
                                         }
                                     }
 
-                                    IconButton(
-                                        onClick = { mainViewModel.rescanAll() },
-                                        modifier = Modifier.testTag("rescan_top_button")
-                                    ) {
-                                        Icon(
-                                            imageVector = Icons.Default.Refresh,
-                                            contentDescription = "Atualizar",
-                                            tint = Color.White
-                                        )
+                                    Box {
+                                        IconButton(
+                                            onClick = { showToolsMenu = true },
+                                            modifier = Modifier.testTag("mobile_tools_menu_button")
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Default.MoreVert,
+                                                contentDescription = "Mais ferramentas",
+                                                tint = Color.White
+                                            )
+                                        }
+                                        DropdownMenu(
+                                            expanded = showToolsMenu,
+                                            onDismissRequest = { showToolsMenu = false }
+                                        ) {
+                                            DropdownMenuItem(
+                                                text = { Text("Torrents") },
+                                                leadingIcon = { Icon(Icons.Default.Link, contentDescription = null) },
+                                                onClick = {
+                                                    showToolsMenu = false
+                                                    activeTab = AppTab.TORRENTS
+                                                }
+                                            )
+                                            DropdownMenuItem(
+                                                text = { Text("Favoritos") },
+                                                leadingIcon = { Icon(Icons.Default.Favorite, contentDescription = null) },
+                                                onClick = {
+                                                    showToolsMenu = false
+                                                    activeTab = AppTab.FAVORITES
+                                                }
+                                            )
+                                            DropdownMenuItem(
+                                                text = { Text("Configurações") },
+                                                leadingIcon = { Icon(Icons.Default.Settings, contentDescription = null) },
+                                                onClick = {
+                                                    showToolsMenu = false
+                                                    activeTab = AppTab.SETTINGS
+                                                }
+                                            )
+                                            DropdownMenuItem(
+                                                text = { Text("Atualizar biblioteca") },
+                                                leadingIcon = { Icon(Icons.Default.Refresh, contentDescription = null) },
+                                                onClick = {
+                                                    showToolsMenu = false
+                                                    mainViewModel.rescanAll()
+                                                }
+                                            )
+                                        }
                                     }
                                 }
                             } else {
@@ -579,21 +630,6 @@ fun CineLocalApp(
                     }
                 }
             },
-            floatingActionButton = {
-                if (activeTab == AppTab.HOME || activeTab == AppTab.MOVIES || activeTab == AppTab.SERIES || activeTab == AppTab.TORRENTS) {
-                    FloatingActionButton(
-                        onClick = { showAddDialog = true },
-                        containerColor = CineRed,
-                        contentColor = Color.White,
-                        shape = RoundedCornerShape(16.dp),
-                        modifier = Modifier
-                            .padding(bottom = 76.dp)
-                            .testTag("fab_add_media")
-                    ) {
-                        Icon(imageVector = Icons.Default.Add, contentDescription = "Adicionar")
-                    }
-                }
-            }
         ) { paddingValues ->
             Box(
                 modifier = Modifier
@@ -779,26 +815,25 @@ fun CineLocalApp(
         // Floating Glass Bottom Navigation Bar
         Box(
             modifier = Modifier
+                .fillMaxWidth()
                 .align(Alignment.BottomCenter)
-                .padding(horizontal = 14.dp, vertical = 14.dp)
                 .navigationBarsPadding()
         ) {
             Surface(
-                color = Color(0xDC0C0C0C), // 86% opaque premium dark glass
-                shape = RoundedCornerShape(24.dp),
+                color = Color(0xF2141414),
+                shape = RoundedCornerShape(topStart = 14.dp, topEnd = 14.dp),
                 border = BorderStroke(1.dp, Color(0x22FFFFFF)),
-                tonalElevation = 8.dp,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(64.dp)
+                    .height(62.dp)
                     .testTag("bottom_nav_bar")
             ) {
                 Row(
-                    modifier = Modifier.fillMaxSize().padding(horizontal = 4.dp),
+                    modifier = Modifier.fillMaxSize().padding(horizontal = 8.dp),
                     horizontalArrangement = Arrangement.SpaceEvenly,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    AppTab.entries.forEach { tab ->
+                    listOf(AppTab.HOME, AppTab.SERIES, AppTab.MOVIES, AppTab.CHANNELS).forEach { tab ->
                         val isSelected = activeTab == tab
                         Column(
                             modifier = Modifier
@@ -815,12 +850,12 @@ fun CineLocalApp(
                                 imageVector = tab.icon,
                                 contentDescription = tab.label,
                                 tint = if (isSelected) CineRed else TextSecondary,
-                                modifier = Modifier.size(20.dp)
+                                modifier = Modifier.size(22.dp)
                             )
-                            Spacer(modifier = Modifier.height(3.dp))
+                            Spacer(modifier = Modifier.height(2.dp))
                             Text(
                                 text = tab.label,
-                                fontSize = 8.5.sp,
+                                fontSize = 10.sp,
                                 color = if (isSelected) CineRed else TextSecondary,
                                 fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
                                 maxLines = 1,

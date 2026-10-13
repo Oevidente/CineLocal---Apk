@@ -25,6 +25,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
@@ -52,7 +53,9 @@ fun HeroBanner(
     Box(
         modifier = modifier
             .fillMaxWidth()
-            .height(420.dp)
+            .padding(horizontal = 12.dp, vertical = 8.dp)
+            .height(350.dp)
+            .clip(RoundedCornerShape(12.dp))
     ) {
         // Backdrop image
         val imageSource = media.backdropPath ?: media.posterPath
@@ -81,11 +84,23 @@ fun HeroBanner(
                 )
         )
 
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(
+                    Brush.horizontalGradient(
+                        colors = listOf(DarkBackground.copy(alpha = 0.55f), Color.Transparent),
+                        startX = 0f,
+                        endX = 900f
+                    )
+                )
+        )
+
         // Content
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(horizontal = 20.dp, vertical = 24.dp),
+                .padding(horizontal = 16.dp, vertical = 20.dp),
             verticalArrangement = Arrangement.Bottom
         ) {
             // Badges row
@@ -148,7 +163,7 @@ fun HeroBanner(
             // Title
             Text(
                 text = media.title,
-                style = MaterialTheme.typography.headlineLarge,
+                style = MaterialTheme.typography.headlineLarge.copy(fontSize = 30.sp),
                 color = TextPrimary,
                 fontWeight = FontWeight.Black,
                 maxLines = 2,

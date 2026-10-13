@@ -22,7 +22,7 @@ android {
 
         // versionCode incrementado para permitir atualizações diretas
         versionCode = if (runNumber != null) 250 + runNumber else 250
-        versionName = "1.7.5"
+        versionName = "1.7.6"
 
         buildConfigField("String", "GIT_SHA", "\"$sha\"")
         buildConfigField("int", "BUILD_NUMBER", "${runNumber ?: 0}")

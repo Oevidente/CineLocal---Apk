@@ -6,9 +6,9 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -57,10 +57,10 @@ fun MediaCard(
 ) {
     Card(
         modifier = modifier
-            .width(135.dp)
+            .width(144.dp)
             .clickable(onClick = onClick)
             .testTag("media_card_${media.id}"),
-        shape = RoundedCornerShape(10.dp),
+        shape = RoundedCornerShape(6.dp),
         colors = CardDefaults.cardColors(containerColor = Color(0xB31E1E1E)),
         border = androidx.compose.foundation.BorderStroke(1.dp, Color(0x1AFFFFFF)),
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
@@ -70,8 +70,8 @@ fun MediaCard(
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(190.dp)
-                    .clip(RoundedCornerShape(topStart = 10.dp, topEnd = 10.dp))
+                    .aspectRatio(2f / 3f)
+                    .clip(RoundedCornerShape(topStart = 6.dp, topEnd = 6.dp))
             ) {
                 val posterUrl = media.posterPath ?: media.backdropPath
                 AsyncImage(
@@ -129,6 +129,24 @@ fun MediaCard(
                     }
                 }
 
+                Text(
+                    text = media.title,
+                    style = MaterialTheme.typography.labelLarge,
+                    color = TextPrimary,
+                    fontWeight = FontWeight.Bold,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier
+                        .align(Alignment.BottomStart)
+                        .fillMaxWidth()
+                        .background(
+                            Brush.verticalGradient(
+                                colors = listOf(Color.Transparent, Color.Black.copy(alpha = 0.92f))
+                            )
+                        )
+                        .padding(horizontal = 8.dp, vertical = 8.dp)
+                )
+
                 // Watch Progress bar at bottom of poster
                 if (progressFraction != null && progressFraction > 0f) {
                     LinearProgressIndicator(
@@ -149,17 +167,6 @@ fun MediaCard(
                     .fillMaxWidth()
                     .padding(8.dp)
             ) {
-                Text(
-                    text = media.title,
-                    style = MaterialTheme.typography.titleSmall,
-                    color = TextPrimary,
-                    fontWeight = FontWeight.Bold,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-
-                Spacer(modifier = Modifier.height(2.dp))
-
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,

@@ -155,7 +155,7 @@ if is android; then
     warn R21 "Versões de Gradle/AGP/Kotlin/bibliotecas mudaram. Confirme que era necessário e que o build passou."
   fi
   # R22 barra de navegação com no máximo 5 abas (aviso)
-  TABS=$(awk '/enum class AppTab/{f=1;next} f&&/^}/{exit} f&&/Icons\./{c++} END{print c+0}' app/src/main/java/com/example/cinelocal/MainActivity.kt 2>/dev/null)
+  TABS=$(awk '/listOf\(AppTab\./ { line=$0; while (match(line, /AppTab\.[A-Z_]+/)) { c++; line=substr(line, RSTART + RLENGTH) } } END { print c+0 }' app/src/main/java/com/example/cinelocal/MainActivity.kt 2>/dev/null)
   [ "${TABS:-0}" -gt 5 ] && warn R22 "Barra inferior com $TABS abas (recomendado: no máximo 5)."
   # R23 package.json (se existir) acompanha a versão do app
   if [ -f package.json ]; then
